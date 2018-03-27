@@ -1,9 +1,10 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-mecanum
 name: XGC2 Gazebo Sim Mecanum
-version: 0.1.0-3
+version: 0.1.0-4
 kind: ros1-apt
-summary: Selectable high-fidelity and ideal Mecanum UGV dynamics for Gazebo Classic 11.
+summary: Selectable high-fidelity and ideal Mecanum UGV dynamics for Gazebo Classic
+  11.
 groups:
 - gazebo-sim
 - ugv-tracking
@@ -39,19 +40,29 @@ apt:
   recommends:
   - ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-13)
 usage:
-  install: |
-    sudo apt update
+  install: 'sudo apt update
+
     sudo apt install ros-noetic-xgc2-gazebo-sim-mecanum
-  smoke_test: |
-    roslaunch --files gazebo_sim_mecanum simple.launch gui:=false
+
+    '
+  smoke_test: 'roslaunch --files gazebo_sim_mecanum simple.launch gui:=false
+
     rostest gazebo_sim_mecanum high_fidelity_drive.test
+
     rostest gazebo_sim_mecanum ideal_drive.test
-  notes: |
-    High fidelity is the default and enables wheel-speed loops, Mecanum slip
+
+    '
+  notes: 'High fidelity is the default and enables wheel-speed loops, Mecanum slip
+
     forces, gravity, and collision. drive_model:=ideal retains the lightweight
+
     collision-free response. Gazebo owns all pose integration in both modes.
+
     The product publishes no odometry; the optional VRPN bridge consumes Gazebo
+
     model poses directly.
+
+    '
 ownership:
   paths:
   - /opt/ros/noetic/lib/gazebo_sim_mecanum
@@ -71,4 +82,4 @@ release:
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
   apt_versions:
-    focal: 0.1.0-3
+    focal: 0.1.0-4
