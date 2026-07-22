@@ -3,9 +3,9 @@
   "definitions": [
     {
       "id": "mecanum-gazebo-robot",
-      "version": "0.1.0",
-      "label": "Ideal Mecanum Gazebo robot",
-      "description": "One collision-free Mecanum model attached to an existing Gazebo Classic server.",
+      "version": "0.2.0",
+      "label": "Mecanum Gazebo robot",
+      "description": "One selectable high-fidelity or ideal Mecanum model attached to an existing Gazebo Classic server.",
       "drivers": [
         "host"
       ],
@@ -16,6 +16,15 @@
             "default": 11345,
             "minimum": 1,
             "maximum": 65535
+          },
+          "driveModel": {
+            "type": "string",
+            "description": "Gazebo drive dynamics",
+            "enum": [
+              "high_fidelity",
+              "ideal"
+            ],
+            "default": "high_fidelity"
           },
           "modelName": {
             "type": "string",
@@ -106,6 +115,7 @@
           "/opt/ros/noetic/share/gazebo_sim_mecanum/launch/spawn.launch",
           "ns:=${namespace}",
           "model_name:=${modelName}",
+          "drive_model:=${driveModel}",
           "x:=${spawnX}",
           "y:=${spawnY}",
           "z:=${spawnZ}",

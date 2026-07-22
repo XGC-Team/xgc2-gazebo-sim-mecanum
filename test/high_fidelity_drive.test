@@ -11,12 +11,12 @@
   <include file="$(find gazebo_sim_mecanum)/launch/spawn.launch">
     <arg name="ns" value="ugv1"/>
     <arg name="model_name" value="ugv1"/>
-    <arg name="drive_model" value="ideal"/>
+    <arg name="drive_model" value="high_fidelity"/>
     <arg name="bond" value="false"/>
     <arg name="state_publish_rate" value="100.0"/>
     <arg name="visualize_max_freq" value="20.0"/>
   </include>
 
-  <test test-name="ideal_drive_contract" pkg="gazebo_sim_mecanum"
-        type="ideal_drive_e2e.py" time-limit="60"/>
+  <test test-name="high_fidelity_drive_contract" pkg="gazebo_sim_mecanum"
+        type="high_fidelity_drive_e2e.py" time-limit="90"/>
 </launch>

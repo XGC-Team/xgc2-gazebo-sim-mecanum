@@ -1,108 +1,109 @@
 <?xml version="1.0"?>
 <sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="robot_namespace" default="ugv1"/>
+  <xacro:arg name="drive_model" default="high_fidelity"/>
+  <xacro:property name="xgc_pi" value="3.141592653589793"/>
+  <xacro:property name="high_fidelity" value="${'$(arg drive_model)' == 'high_fidelity'}"/>
+
+  <xacro:macro name="wheel" params="name x y axis_y mesh roll">
+    <link name="${name}">
+      <pose>${x} ${y} 0.05 0 0 0</pose>
+      <gravity>true</gravity>
+      <inertial>
+        <mass>0.3844</mass>
+        <inertia>
+          <ixx>0.000324824</ixx><iyy>0.000480000</iyy><izz>0.000324824</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 0 ${roll} 0 0</pose>
+        <geometry><mesh><uri>${mesh}</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+      </visual>
+      <collision name="contact">
+        <pose>0 0 0 ${xgc_pi / 2.0} 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.0505</length></cylinder></geometry>
+        <surface>
+          <!-- Horizontal Mecanum traction is computed by the model plugin;
+               this collision supplies vertical contact and wheel geometry. -->
+          <friction><ode><mu>0</mu><mu2>0</mu2></ode></friction>
+          <contact><ode><kp>1000000</kp><kd>10</kd><max_vel>0.1</max_vel><min_depth>0.001</min_depth></ode></contact>
+        </surface>
+      </collision>
+    </link>
+    <joint name="${name}_joint" type="revolute">
+      <!-- Joint poses are expressed in the child-link frame by default. -->
+      <pose>0 0 0 0 0 0</pose>
+      <parent>base_footprint</parent>
+      <child>${name}</child>
+      <axis>
+        <xyz>0 ${axis_y} 0</xyz>
+        <limit><lower>-${1.0e16}</lower><upper>${1.0e16}</upper><effort>2.0</effort><velocity>80.0</velocity></limit>
+        <dynamics><damping>0.002</damping><friction>0</friction></dynamics>
+      </axis>
+    </joint>
+  </xacro:macro>
+
   <model name="xgc2_mecanum_ugv">
     <static>false</static>
     <self_collide>false</self_collide>
     <allow_auto_disable>false</allow_auto_disable>
-
-    <!--
-      The model origin is base_footprint at ground level. This link has no
-      collision geometry and no gravity. Gazebo owns the velocity integration;
-      there is deliberately no wheel/contact dynamics.
-    -->
     <link name="base_footprint">
-      <gravity>false</gravity>
+      <gravity>${high_fidelity}</gravity>
       <self_collide>false</self_collide>
-      <velocity_decay>
-        <linear>0</linear>
-        <angular>0</angular>
-      </velocity_decay>
-      <inertial>
-        <mass>1.0</mass>
-        <inertia>
-          <ixx>0.02</ixx>
-          <iyy>0.06</iyy>
-          <izz>0.08</izz>
-        </inertia>
-      </inertial>
+      <velocity_decay><linear>0</linear><angular>0</angular></velocity_decay>
+      <xacro:if value="${high_fidelity}">
+        <inertial>
+          <pose>-0.01103 0 0.052 0 0 0</pose>
+          <mass>2.844</mass>
+          <inertia>
+            <ixx>0.018819942</ixx><iyy>0.057333716</iyy><izz>0.074201740</izz>
+            <ixy>0</ixy><ixz>-0.000101519</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="chassis">
+          <pose>0 0 0.055 0 0 0</pose>
+          <geometry><box><size>0.34 0.22 0.08</size></box></geometry>
+          <surface><friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction></surface>
+        </collision>
+      </xacro:if>
+      <xacro:unless value="${high_fidelity}">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia><ixx>0.02</ixx><iyy>0.06</iyy><izz>0.08</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+      </xacro:unless>
 
       <visual name="base_link">
         <pose>0 0 0.05 0 0 0</pose>
-        <geometry>
-          <mesh>
-            <uri>model://mecanum_description/meshes/nexus_base_link.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
-          </mesh>
-        </geometry>
-        <material>
-          <ambient>0.9 0.8 0.6 1</ambient>
-          <diffuse>0.9 0.8 0.6 1</diffuse>
-        </material>
+        <geometry><mesh><uri>model://mecanum_description/meshes/nexus_base_link.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <material><ambient>0.9 0.8 0.6 1</ambient><diffuse>0.9 0.8 0.6 1</diffuse></material>
       </visual>
 
-      <visual name="upper_left_wheel_shaft">
-        <pose>0.150 0.108 0.05 0 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/wheel_shaft.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="lower_left_wheel_shaft">
-        <pose>-0.150 0.108 0.05 0 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/wheel_shaft.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="upper_right_wheel_shaft">
-        <pose>0.150 -0.108 0.05 3.141592653589793 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/wheel_shaft.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="lower_right_wheel_shaft">
-        <pose>-0.150 -0.108 0.05 3.141592653589793 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/wheel_shaft.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
+      <xacro:macro name="fixed_visual" params="name pose uri color">
+        <visual name="${name}">
+          <pose>${pose}</pose>
+          <geometry><mesh><uri>${uri}</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+          <material><ambient>${color}</ambient><diffuse>${color}</diffuse></material>
+        </visual>
+      </xacro:macro>
+      <xacro:fixed_visual name="upper_left_wheel_shaft" pose="0.150 0.108 0.05 0 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="lower_left_wheel_shaft" pose="-0.150 0.108 0.05 0 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="upper_right_wheel_shaft" pose="0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="lower_right_wheel_shaft" pose="-0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
 
-      <visual name="upper_left_wheel">
-        <pose>0.150 0.150 0.05 0 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/mecanum_wheel_left.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
-      <visual name="lower_left_wheel">
-        <pose>-0.150 0.150 0.05 0 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/mecanum_wheel_right.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
-      <visual name="upper_right_wheel">
-        <pose>0.150 -0.150 0.05 3.141592653589793 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/mecanum_wheel_right.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
-      <visual name="lower_right_wheel">
-        <pose>-0.150 -0.150 0.05 3.141592653589793 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/mecanum_wheel_left.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
-      </visual>
+      <xacro:unless value="${high_fidelity}">
+        <xacro:fixed_visual name="upper_left_wheel" pose="0.150 0.150 0.05 0 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="lower_left_wheel" pose="-0.150 0.150 0.05 0 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="upper_right_wheel" pose="0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="lower_right_wheel" pose="-0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
+      </xacro:unless>
 
-      <visual name="front_sensor">
-        <pose>0.205 0 0.06 1.570796326794897 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/urm04.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="left_sensor">
-        <pose>0 0.108 0.06 1.570796326794897 0 1.570796326794897</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/urm04.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="right_sensor">
-        <pose>0 -0.108 0.06 1.570796326794897 0 -1.570796326794897</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/urm04.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="rear_sensor">
-        <pose>-0.201 0 0.06 1.570796326794897 0 3.141592653589793</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/urm04.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
+      <xacro:fixed_visual name="front_sensor" pose="0.205 0 0.06 ${xgc_pi / 2.0} 0 0" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="left_sensor" pose="0 0.108 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi / 2.0}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="right_sensor" pose="0 -0.108 0.06 ${xgc_pi / 2.0} 0 ${-xgc_pi / 2.0}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="rear_sensor" pose="-0.201 0 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
       <visual name="stereo_camera">
         <pose>0.205 0 0.06 0 0 0</pose>
         <geometry><box><size>0.02 0.08 0.01</size></box></geometry>
@@ -110,26 +111,28 @@
       </visual>
     </link>
 
-    <!-- Set ideal velocity and publish the ROS contract; Gazebo integrates pose. -->
+    <xacro:if value="${high_fidelity}">
+      <xacro:wheel name="upper_left_wheel" x="0.150" y="0.150" axis_y="1" roll="0" mesh="model://mecanum_description/meshes/mecanum_wheel_left.STL"/>
+      <xacro:wheel name="upper_right_wheel" x="0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="model://mecanum_description/meshes/mecanum_wheel_right.STL"/>
+      <xacro:wheel name="lower_left_wheel" x="-0.150" y="0.150" axis_y="1" roll="0" mesh="model://mecanum_description/meshes/mecanum_wheel_right.STL"/>
+      <xacro:wheel name="lower_right_wheel" x="-0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="model://mecanum_description/meshes/mecanum_wheel_left.STL"/>
+    </xacro:if>
+
     <plugin name="mecanum_contract" filename="libgazebo_sim_mecanum_contract.so">
       <robotNamespace>$(arg robot_namespace)</robotNamespace>
-      <commandTopic>cmd_vel</commandTopic>
-      <poseTopic>pose</poseTopic>
-      <twistTopic>twist</twistTopic>
-      <imuTopic>imu</imuTopic>
-      <jointStatesTopic>joint_states</jointStatesTopic>
-      <statePublishRate>100</statePublishRate>
-      <visualPublishRate>20</visualPublishRate>
-      <maxFrontVelocity>1.5</maxFrontVelocity>
-      <maxLeftVelocity>1.5</maxLeftVelocity>
+      <driveModel>$(arg drive_model)</driveModel>
+      <commandTopic>cmd_vel</commandTopic><poseTopic>pose</poseTopic><twistTopic>twist</twistTopic>
+      <imuTopic>imu</imuTopic><jointStatesTopic>joint_states</jointStatesTopic>
+      <statePublishRate>100</statePublishRate><visualPublishRate>20</visualPublishRate>
+      <maxFrontVelocity>1.5</maxFrontVelocity><maxLeftVelocity>1.5</maxLeftVelocity>
       <maxYawVelocity>1.570796326794897</maxYawVelocity>
-      <linearScale>1</linearScale>
-      <angularScale>1</angularScale>
-      <imuYawBase>0.7853981633974483</imuYawBase>
-      <useImuOrientation>false</useImuOrientation>
-      <mapFrame>map</mapFrame>
-      <imuFrame>world</imuFrame>
-      <baseFrame>base_footprint</baseFrame>
+      <linearScale>1</linearScale><angularScale>1</angularScale>
+      <wheelRadius>0.05</wheelRadius><wheelbaseSum>0.30</wheelbaseSum>
+      <wheelPidP>0.35</wheelPidP><wheelTorqueLimit>1.2</wheelTorqueLimit>
+      <tractionGain>18.0</tractionGain><frictionCoefficient>0.85</frictionCoefficient>
+      <linearDrag>0.10</linearDrag><angularDrag>0.02</angularDrag><yawTractionScale>0.45</yawTractionScale>
+      <imuYawBase>0.7853981633974483</imuYawBase><useImuOrientation>false</useImuOrientation>
+      <mapFrame>map</mapFrame><imuFrame>world</imuFrame><baseFrame>base_footprint</baseFrame>
     </plugin>
   </model>
 </sdf>

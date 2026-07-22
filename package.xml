@@ -2,7 +2,7 @@
 <package format="2">
   <name>gazebo_sim_mecanum</name>
   <version>0.1.0</version>
-  <description>Ideal planar-velocity Mecanum UGV model for Gazebo Classic.</description>
+  <description>Selectable high-fidelity and ideal Mecanum UGV model for Gazebo Classic.</description>
 
   <maintainer email="dev@xiaokang.ink">XGC2</maintainer>
   <license>BSD-3-Clause</license>

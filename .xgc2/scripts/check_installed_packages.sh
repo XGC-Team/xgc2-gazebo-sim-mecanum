@@ -20,5 +20,6 @@ GAZEBO_MODEL_PATH="/opt/ros/${ROS_DISTRO}/share:/opt/ros/${ROS_DISTRO}/share/gaz
 ldd "/opt/ros/${ROS_DISTRO}/lib/libgazebo_sim_mecanum_contract.so" | \
   awk '/not found/ {missing=1} END {exit missing ? 1 : 0}'
 
+LIBGL_ALWAYS_SOFTWARE=1 timeout 90 rostest gazebo_sim_mecanum high_fidelity_drive.test
 LIBGL_ALWAYS_SOFTWARE=1 timeout 60 rostest gazebo_sim_mecanum ideal_drive.test
 echo "Installed package check passed"

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -33,6 +34,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kSssMaxFrontVelocity = 1.5;
 constexpr double kSssMaxLeftVelocity = 1.5;
 constexpr double kSssMaxYawVelocity = kPi / 2.0;
+constexpr std::size_t kWheelCount = 4;
 
 template <typename T>
 T SdfValue(const sdf::ElementPtr& sdf, const std::string& name, const T& fallback) {
@@ -58,9 +60,9 @@ std::string TrimSlashes(std::string value) {
 
 }  // namespace
 
-// This plugin sets an ideal planar velocity and publishes the ROS contract. It
-// never integrates or writes a pose and never applies a force. Gazebo remains
-// the sole owner of velocity-to-pose integration, pause, and reset semantics.
+// Gazebo always owns pose integration. The selectable ideal mode writes the
+// requested body velocity, while the default high-fidelity mode closes four
+// wheel-speed loops and converts wheel/ground slip into bounded Mecanum forces.
 class MecanumContractPlugin final : public gazebo::ModelPlugin {
  public:
   MecanumContractPlugin() = default;
@@ -111,6 +113,45 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     map_frame_ = SdfValue<std::string>(sdf, "mapFrame", "map");
     imu_frame_ = SdfValue<std::string>(sdf, "imuFrame", "world");
     base_frame_ = SdfValue<std::string>(sdf, "baseFrame", "base_footprint");
+    drive_model_ = SdfValue<std::string>(sdf, "driveModel", "high_fidelity");
+    wheel_radius_ = std::abs(SdfValue<double>(sdf, "wheelRadius", 0.05));
+    wheelbase_sum_ = std::abs(SdfValue<double>(sdf, "wheelbaseSum", 0.30));
+    wheel_pid_p_ = std::abs(SdfValue<double>(sdf, "wheelPidP", 0.35));
+    wheel_torque_limit_ = std::abs(SdfValue<double>(sdf, "wheelTorqueLimit", 1.2));
+    traction_gain_ = std::abs(SdfValue<double>(sdf, "tractionGain", 18.0));
+    friction_coefficient_ = std::abs(SdfValue<double>(sdf, "frictionCoefficient", 0.85));
+    linear_drag_ = std::abs(SdfValue<double>(sdf, "linearDrag", 0.10));
+    angular_drag_ = std::abs(SdfValue<double>(sdf, "angularDrag", 0.02));
+    yaw_traction_scale_ = std::abs(SdfValue<double>(sdf, "yawTractionScale", 0.45));
+
+    if (drive_model_ != "high_fidelity" && drive_model_ != "ideal") {
+      gzerr << "[gazebo_sim_mecanum] driveModel must be 'high_fidelity' or 'ideal', got '"
+            << drive_model_ << "'\n";
+      return;
+    }
+    high_fidelity_ = drive_model_ == "high_fidelity";
+    if (high_fidelity_) {
+      body_link_ = model_->GetLink("base_footprint");
+      const std::array<std::string, kWheelCount> joint_names = {
+          "upper_left_wheel_joint", "upper_right_wheel_joint", "lower_left_wheel_joint",
+          "lower_right_wheel_joint"};
+      for (std::size_t index = 0; index < joint_names.size(); ++index) {
+        wheel_joints_[index] = model_->GetJoint(joint_names[index]);
+        if (!wheel_joints_[index]) {
+          gzerr << "[gazebo_sim_mecanum] Missing high-fidelity joint '" << joint_names[index] << "'\n";
+          return;
+        }
+      }
+      if (!body_link_ || wheel_radius_ < 1.0e-6) {
+        gzerr << "[gazebo_sim_mecanum] Invalid high-fidelity body or wheel radius\n";
+        return;
+      }
+      double total_mass = 0.0;
+      for (const auto& link : model_->GetLinks()) {
+        total_mass += link->GetInertial()->Mass();
+      }
+      normal_force_per_wheel_ = total_mass * 9.80665 / static_cast<double>(kWheelCount);
+    }
 
     ros_node_->param("state_publish_rate", state_publish_rate_, state_publish_rate_);
     ros_node_->param("visualize_max_freq", visual_publish_rate_, visual_publish_rate_);
@@ -151,14 +192,16 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
         std::bind(&MecanumContractPlugin::OnUpdate, this, std::placeholders::_1));
 
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
-                                                    << ros_node_->getNamespace()
-                                                    << "' uses Gazebo-owned planar integration");
+                                                    << ros_node_->getNamespace() << "' drive_model='"
+                                                    << (high_fidelity_ ? "high_fidelity" : "ideal")
+                                                    << "' uses Gazebo-owned integration");
   }
 
   void Reset() override {
     next_state_publish_time_ = 0.0;
     next_visual_publish_time_ = 0.0;
     last_visual_update_time_ = 0.0;
+    last_update_time_ = 0.0;
     wheel_positions_.assign(4, 0.0);
   }
 
@@ -175,7 +218,16 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       return;
     }
     const double now = info.simTime.Double();
-    ApplyPlanarVelocity();
+    double dt = 0.0;
+    if (last_update_time_ > 0.0 && now >= last_update_time_) {
+      dt = now - last_update_time_;
+    }
+    last_update_time_ = now;
+    if (high_fidelity_) {
+      ApplyWheelDynamics(dt);
+    } else {
+      ApplyPlanarVelocity();
+    }
     if (next_state_publish_time_ == 0.0 || now + 1.0e-9 >= next_state_publish_time_) {
       PublishState(now);
       AdvanceDeadline(now, 1.0 / state_publish_rate_, &next_state_publish_time_);
@@ -201,6 +253,57 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
                                                   front_velocity * std::sin(yaw) + left_velocity * std::cos(yaw),
                                                   0.0));
     model_->SetAngularVel(ignition::math::Vector3d(0.0, 0.0, yaw_velocity));
+  }
+
+  void ApplyWheelDynamics(double dt) {
+    double front_velocity;
+    double left_velocity;
+    double yaw_velocity;
+    {
+      std::lock_guard<std::mutex> lock(command_mutex_);
+      front_velocity = front_velocity_command_;
+      left_velocity = left_velocity_command_;
+      yaw_velocity = yaw_velocity_command_;
+    }
+
+    const std::array<double, kWheelCount> lateral_sign = {-1.0, 1.0, 1.0, -1.0};
+    const std::array<double, kWheelCount> yaw_sign = {-1.0, 1.0, -1.0, 1.0};
+    const std::array<double, kWheelCount> joint_sign = {1.0, -1.0, 1.0, -1.0};
+    const ignition::math::Pose3d pose = model_->WorldPose();
+    const ignition::math::Vector3d body_velocity = pose.Rot().RotateVectorReverse(model_->WorldLinearVel());
+    const double body_yaw_rate = model_->WorldAngularVel().Z();
+    const double max_traction = friction_coefficient_ * normal_force_per_wheel_;
+    double body_force_x = -linear_drag_ * body_velocity.X();
+    double body_force_y = -linear_drag_ * body_velocity.Y();
+    double body_torque_z = -angular_drag_ * body_yaw_rate;
+
+    for (std::size_t index = 0; index < kWheelCount; ++index) {
+      const double requested_ground_speed = front_velocity + lateral_sign[index] * left_velocity +
+                                            yaw_sign[index] * wheelbase_sum_ * yaw_velocity;
+      const double target_joint_speed = joint_sign[index] * requested_ground_speed / wheel_radius_;
+      const double joint_speed = wheel_joints_[index]->GetVelocity(0);
+      const double effective_wheel_speed = joint_sign[index] * joint_speed;
+      const double contact_ground_speed = body_velocity.X() + lateral_sign[index] * body_velocity.Y() +
+                                          yaw_sign[index] * wheelbase_sum_ * body_yaw_rate;
+      const double slip_speed = wheel_radius_ * effective_wheel_speed - contact_ground_speed;
+      const double traction = ClampFinite(traction_gain_ * slip_speed, max_traction);
+      const double motor_torque =
+          ClampFinite(wheel_pid_p_ * (target_joint_speed - joint_speed), wheel_torque_limit_);
+      const double reaction_torque = joint_sign[index] * wheel_radius_ * traction;
+      wheel_joints_[index]->SetForce(0, motor_torque - reaction_torque);
+
+      // The 1/2 factor is the virtual-work mapping for the 45-degree roller
+      // directions used by the standard four-wheel Mecanum Jacobian.
+      body_force_x += 0.5 * traction;
+      body_force_y += 0.5 * lateral_sign[index] * traction;
+      body_torque_z += 0.5 * yaw_traction_scale_ * yaw_sign[index] * wheelbase_sum_ * traction;
+    }
+
+    if (dt > 0.0 && std::isfinite(body_force_x) && std::isfinite(body_force_y) &&
+        std::isfinite(body_torque_z)) {
+      body_link_->AddRelativeForce(ignition::math::Vector3d(body_force_x, body_force_y, 0.0));
+      body_link_->AddRelativeTorque(ignition::math::Vector3d(0.0, 0.0, body_torque_z));
+    }
   }
 
   static void AdvanceDeadline(double now, double period, double* deadline) {
@@ -270,12 +373,13 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     const double left_velocity = -std::sin(yaw) * world_velocity.X() + std::cos(yaw) * world_velocity.Y();
     const double yaw_velocity = model_->WorldAngularVel().Z();
 
+    // joint_states is a renderer contract, not a leak of simulator-internal
+    // wheel speeds. Derive animation from measured body motion so the same
+    // visualization path also works for a physical robot.
     double dt = 0.0;
     if (last_visual_update_time_ > 0.0 && sim_time >= last_visual_update_time_) {
       dt = sim_time - last_visual_update_time_;
     }
-    last_visual_update_time_ = sim_time;
-
     constexpr double wheel_radius = 0.05;
     constexpr double half_wheelbase_plus_half_track = 0.30;
     const double wheel_velocity[4] = {
@@ -285,8 +389,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
         -(front_velocity - left_velocity + yaw_velocity * half_wheelbase_plus_half_track) / wheel_radius,
     };
     for (std::size_t index = 0; index < wheel_positions_.size(); ++index) {
-      wheel_positions_[index] = std::remainder(wheel_positions_[index] + wheel_velocity[index] * dt, 2.0 * kPi);
+      wheel_positions_[index] =
+          std::remainder(wheel_positions_[index] + wheel_velocity[index] * dt, 2.0 * kPi);
     }
+    last_visual_update_time_ = sim_time;
 
     ros::Time stamp;
     stamp.fromSec(sim_time);
@@ -312,6 +418,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
   gazebo::physics::ModelPtr model_;
+  gazebo::physics::LinkPtr body_link_;
+  std::array<gazebo::physics::JointPtr, kWheelCount> wheel_joints_{};
   gazebo::event::ConnectionPtr update_connection_;
   std::unique_ptr<ros::NodeHandle> ros_node_;
   ros::CallbackQueue command_queue_;
@@ -336,6 +444,18 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   double angular_scale_{1.0};
   double imu_yaw_base_{kPi / 4.0};
   bool use_imu_orientation_{false};
+  bool high_fidelity_{true};
+  std::string drive_model_{"high_fidelity"};
+  double wheel_radius_{0.05};
+  double wheelbase_sum_{0.30};
+  double wheel_pid_p_{0.35};
+  double wheel_torque_limit_{1.2};
+  double traction_gain_{18.0};
+  double friction_coefficient_{0.85};
+  double normal_force_per_wheel_{0.0};
+  double linear_drag_{0.10};
+  double angular_drag_{0.02};
+  double yaw_traction_scale_{0.45};
   std::string map_frame_{"map"};
   std::string imu_frame_{"world"};
   std::string base_frame_{"base_footprint"};
@@ -343,6 +463,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   double next_state_publish_time_{0.0};
   double next_visual_publish_time_{0.0};
   double last_visual_update_time_{0.0};
+  double last_update_time_{0.0};
   std::vector<double> wheel_positions_{0.0, 0.0, 0.0, 0.0};
 };
 

@@ -7,7 +7,7 @@ cd "${REPO_ROOT}"
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/xgc2-gazebo-sim-mecanum-pycache}"
 
 bash -n .xgc2/scripts/*.sh
-python3 -m py_compile scripts/check_model_ready.py test/ideal_drive_e2e.py \
+python3 -m py_compile scripts/check_model_ready.py test/ideal_drive_e2e.py test/high_fidelity_drive_e2e.py \
   .xgc2/scripts/xgc2_artifact_manifest.py
 python3 -m json.tool process-definitions/xgc2-gazebo-sim-mecanum.json >/dev/null
 
@@ -35,20 +35,24 @@ required=(
   src/mecanum_contract_plugin.cpp
   test/ideal_drive.test
   test/ideal_drive_e2e.py
+  test/high_fidelity_drive.test
+  test/high_fidelity_drive_e2e.py
 )
 for path in "${required[@]}"; do
   test -f "${path}" || { echo "Missing ${path}" >&2; exit 1; }
 done
 
 grep -q '^id: xgc2-gazebo-sim-mecanum$' .xgc2/product.yml
-grep -q '^version: 0.1.0-2$' .xgc2/product.yml
-grep -q '^    focal: 0.1.0-2$' .xgc2/product.yml
+grep -q '^version: 0.1.0-3$' .xgc2/product.yml
+grep -q '^    focal: 0.1.0-3$' .xgc2/product.yml
 grep -q '<name>gazebo_sim_mecanum</name>' package.xml
 grep -q 'PACKAGE="ros-noetic-xgc2-gazebo-sim-mecanum"' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-rostest' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-xgc2-mecanum-description (>= 0.1.0-1)' .xgc2/scripts/package_debs.sh
 grep -Eq -- '-Y \$\(arg yaw\).*' launch/spawn.launch
 grep -q -- '-b' launch/spawn.launch
+grep -q '"default": "high_fidelity"' process-definitions/xgc2-gazebo-sim-mecanum.json
+grep -q '"drive_model:=${driveModel}"' process-definitions/xgc2-gazebo-sim-mecanum.json
 
 for xml in package.xml launch/*.launch models/xgc2_mecanum_ugv/model.config \
   models/xgc2_mecanum_ugv/model.sdf models/xgc2_mecanum_ugv/model.sdf.xacro test/*.test; do
@@ -58,21 +62,36 @@ GAZEBO_MODEL_PATH="/opt/ros/noetic/share:${REPO_ROOT}/models:${GAZEBO_MODEL_PATH
 expanded_sdf="$(mktemp)"
 /opt/ros/noetic/bin/xacro models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=ugv_contract >"${expanded_sdf}"
 grep -q '<robotNamespace>ugv_contract</robotNamespace>' "${expanded_sdf}"
+grep -q '<driveModel>high_fidelity</driveModel>' "${expanded_sdf}"
+grep -q '<gravity>True</gravity>' "${expanded_sdf}"
+grep -q '<joint name="upper_left_wheel_joint"' "${expanded_sdf}"
 GAZEBO_MODEL_PATH="/opt/ros/noetic/share:${REPO_ROOT}/models:${GAZEBO_MODEL_PATH:-}" gz sdf -k "${expanded_sdf}"
 rm -f "${expanded_sdf}"
+
+expanded_ideal_sdf="$(mktemp)"
+/opt/ros/noetic/bin/xacro models/xgc2_mecanum_ugv/model.sdf.xacro \
+  robot_namespace:=ugv_contract drive_model:=ideal >"${expanded_ideal_sdf}"
+grep -q '<driveModel>ideal</driveModel>' "${expanded_ideal_sdf}"
+grep -q '<gravity>False</gravity>' "${expanded_ideal_sdf}"
+if grep -Eq '<collision|<joint name=".*wheel_joint"' "${expanded_ideal_sdf}"; then
+  echo "Ideal SDF must remain collision-free and wheel-joint-free" >&2
+  exit 1
+fi
+GAZEBO_MODEL_PATH="/opt/ros/noetic/share:${REPO_ROOT}/models:${GAZEBO_MODEL_PATH:-}" gz sdf -k "${expanded_ideal_sdf}"
+rm -f "${expanded_ideal_sdf}"
 
 grep -q 'filename="libgazebo_sim_mecanum_contract.so"' models/xgc2_mecanum_ugv/model.sdf
 grep -q 'model_->SetLinearVel' src/mecanum_contract_plugin.cpp
 grep -q 'model_->SetAngularVel' src/mecanum_contract_plugin.cpp
+grep -q 'wheel_joints_\[index\]->SetForce' src/mecanum_contract_plugin.cpp
+grep -q 'body_link_->AddRelativeForce' src/mecanum_contract_plugin.cpp
 if grep -Rq 'SetWorldPose' src; then
   echo "Plugin must let Gazebo integrate pose" >&2
   exit 1
 fi
-grep -q '<gravity>false</gravity>' models/xgc2_mecanum_ugv/model.sdf
-if grep -Eq '<collision|force_based|gazebo_ros_control|wheel.*(force|torque)' models/xgc2_mecanum_ugv/model.sdf; then
-  echo "SDF contains forbidden collision or low-level dynamics" >&2
-  exit 1
-fi
+grep -q '<gravity>True</gravity>' models/xgc2_mecanum_ugv/model.sdf
+grep -q '<collision name="chassis">' models/xgc2_mecanum_ugv/model.sdf
+grep -q '<joint name="upper_left_wheel_joint"' models/xgc2_mecanum_ugv/model.sdf
 if grep -Rq 'libnexus_ros_force_based_move.so' CMakeLists.txt package.xml launch models src test; then
   echo "Legacy force-based plugin reference found" >&2
   exit 1

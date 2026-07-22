@@ -2,6 +2,7 @@
 <launch>
   <arg name="ns" default="ugv1"/>
   <arg name="model_name" default="$(arg ns)"/>
+  <arg name="drive_model" default="high_fidelity"/>
   <arg name="world_name" default="$(find gazebo_sim_worlds)/worlds/empty/empty.world"/>
   <arg name="gui" default="true"/>
   <arg name="paused" default="false"/>
@@ -30,6 +31,7 @@
   <include file="$(dirname)/spawn.launch">
     <arg name="ns" value="$(arg ns)"/>
     <arg name="model_name" value="$(arg model_name)"/>
+    <arg name="drive_model" value="$(arg drive_model)"/>
     <arg name="x" value="$(arg x)"/>
     <arg name="y" value="$(arg y)"/>
     <arg name="z" value="$(arg z)"/>
