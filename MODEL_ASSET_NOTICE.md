@@ -1,8 +1,8 @@
 # Model asset notice
 
-The Nexus four-wheel Mecanum geometry and STL assets in
-`models/xgc2_mecanum_ugv` were adapted from the `ugv_sim` package in
-`swarm-sync-sim`.
+The Gazebo model layout was adapted from the `ugv_sim` package in
+`swarm-sync-sim`. The Nexus four-wheel Mecanum geometry and STL assets now
+belong to the independent `mecanum_description` package.
 
 Copyright (c) 2024, Peixuan Shu. Distributed under the BSD 3-Clause License
 included in this repository.

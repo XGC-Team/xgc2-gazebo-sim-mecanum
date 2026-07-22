@@ -56,7 +56,7 @@ Section: misc
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: XGC2 <apt@example.com>
-Depends: libgazebo11, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-roslaunch, ros-noetic-rospy, ros-noetic-rostest, ros-noetic-sensor-msgs, ros-noetic-tf2, ros-noetic-tf2-ros, ros-noetic-xacro, ros-noetic-xgc2-gazebo-sim-worlds (>= 1.1.0-14)
+Depends: libgazebo11, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-roslaunch, ros-noetic-rospy, ros-noetic-rostest, ros-noetic-sensor-msgs, ros-noetic-tf2, ros-noetic-tf2-ros, ros-noetic-xacro, ros-noetic-xgc2-mecanum-description (>= 0.1.0-1), ros-noetic-xgc2-gazebo-sim-worlds (>= 1.1.0-14)
 Recommends: ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-13)
 Description: XGC2 collision-free ideal Mecanum UGV for Gazebo Classic
 EOF

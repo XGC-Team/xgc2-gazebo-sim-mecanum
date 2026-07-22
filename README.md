@@ -4,6 +4,10 @@ Gazebo Classic 11 product for a lightweight Nexus four-wheel Mecanum UGV. The
 model is visual-only: it has no collision geometry, gravity, tire friction,
 wheel force, PID, or `ros_control` path.
 
+Reusable vehicle meshes and the visual URDF are owned by the independent
+`mecanum_description` package. This simulation product owns only its Gazebo
+model wrapper, ideal velocity plugin, launch files, and runtime contract.
+
 The model plugin clips body-frame planar commands and sets Gazebo's model
 velocity. Gazebo itself integrates the pose and owns simulation time, pause,
 and reset. The plugin never computes or writes a pose.

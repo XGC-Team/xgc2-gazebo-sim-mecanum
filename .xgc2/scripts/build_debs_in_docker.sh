@@ -74,6 +74,7 @@ docker run --rm \
       ros-noetic-rospack ros-noetic-rospy ros-noetic-rostest \
       ros-noetic-sensor-msgs ros-noetic-tf ros-noetic-tf2 ros-noetic-tf2-ros \
       ros-noetic-xacro \
+      ros-noetic-xgc2-mecanum-description \
       ros-noetic-xgc2-gazebo-sim-worlds
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
