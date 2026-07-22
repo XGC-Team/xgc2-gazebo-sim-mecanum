@@ -1,0 +1,69 @@
+schema: xgc2.product.v1
+id: xgc2-gazebo-sim-mecanum
+name: XGC2 Gazebo Sim Mecanum
+version: 0.1.0-1
+kind: ros1-apt
+summary: Collision-free ideal planar-velocity Mecanum UGV for Gazebo Classic 11.
+groups:
+- gazebo-sim
+- ugv-tracking
+ros:
+  distro: noetic
+  packages:
+  - gazebo_sim_mecanum
+apt:
+  distribution: focal
+  install:
+  - ros-noetic-xgc2-gazebo-sim-mecanum
+  packages:
+  - ros-noetic-xgc2-gazebo-sim-mecanum
+  package_architectures:
+    ros-noetic-xgc2-gazebo-sim-mecanum:
+    - amd64
+    - arm64
+  depends:
+  - libgazebo11
+  - ros-noetic-gazebo-msgs
+  - ros-noetic-gazebo-ros
+  - ros-noetic-geometry-msgs
+  - ros-noetic-roscpp
+  - ros-noetic-roslaunch
+  - ros-noetic-rospy
+  - ros-noetic-rostest
+  - ros-noetic-sensor-msgs
+  - ros-noetic-tf2
+  - ros-noetic-tf2-ros
+  - ros-noetic-xacro
+  - ros-noetic-xgc2-gazebo-sim-worlds (>= 1.1.0-14)
+  recommends:
+  - ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-13)
+usage:
+  install: |
+    sudo apt update
+    sudo apt install ros-noetic-xgc2-gazebo-sim-mecanum
+  smoke_test: |
+    roslaunch --files gazebo_sim_mecanum simple.launch gui:=false
+    rostest gazebo_sim_mecanum ideal_drive.test
+  notes: |
+    The vehicle is visual-only and has no collision, tire, force, PID, or
+    ros_control dynamics. Gazebo owns all velocity-to-pose integration.
+    The product publishes no odometry; the optional VRPN bridge consumes Gazebo
+    model poses directly.
+ownership:
+  paths:
+  - /opt/ros/noetic/lib/gazebo_sim_mecanum
+  - /opt/ros/noetic/share/gazebo_sim_mecanum
+  - /opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so
+  - /usr/share/xgc2/process-definitions/xgc2-gazebo-sim-mecanum.json
+release:
+  repository: lxk36/xgc2-gazebo-sim-mecanum
+  ref: noetic
+  workflow: release.yml
+  ci_workflow: ci.yml
+  requires:
+  - xgc2-gazebo-sim-worlds
+  dependency_policy:
+    xgc2-gazebo-sim-vrpn-bridge: verify
+    xgc2-gazebo-sim-worlds: verify
+  apt_versions:
+    focal: 0.1.0-1

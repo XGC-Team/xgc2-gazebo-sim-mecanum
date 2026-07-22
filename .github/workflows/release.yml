@@ -1,0 +1,155 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Expected .xgc2/product.yml version
+        required: true
+        type: string
+      expected_source_sha:
+        description: Expected source commit SHA
+        required: true
+        type: string
+      prepare_action:
+        description: Release-train action
+        required: false
+        default: release
+        type: choice
+        options:
+          - release
+          - compatibility-verify
+      apt_overlay_url:
+        description: Optional release-scoped staging APT base URL
+        required: false
+        default: ""
+        type: string
+      dependency_set_digest:
+        description: SHA256 of the resolved release-train dependency set
+        required: false
+        default: ""
+        type: string
+      run_cpp_quality:
+        description: Run optional C++ quality checks
+        required: true
+        default: false
+        type: boolean
+      run_source_tests:
+        description: Run an additional source test build
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  XGC2_APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
+  XGC2_DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}
+
+jobs:
+  prepare-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release-train inputs
+        env:
+          PREPARE_ACTION: ${{ inputs.prepare_action }}
+          APT_OVERLAY_URL: ${{ inputs.apt_overlay_url }}
+          DEPENDENCY_SET_DIGEST: ${{ inputs.dependency_set_digest }}
+        run: |
+          set -euo pipefail
+          case "$PREPARE_ACTION" in release|compatibility-verify) ;; *) exit 1 ;; esac
+          if [[ -n "$DEPENDENCY_SET_DIGEST" && ! "$DEPENDENCY_SET_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "dependency_set_digest must be empty or 64 lowercase hex characters" >&2
+            exit 1
+          fi
+          if [[ -n "$APT_OVERLAY_URL" && ! "$DEPENDENCY_SET_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "apt_overlay_url requires a dependency_set_digest" >&2
+            exit 1
+          fi
+
+  validate-release-inputs:
+    needs: prepare-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate expected version and source SHA
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's|^version:[[:space:]]*([^[:space:]#]+).*|\1|p' .xgc2/product.yml | head -n1)"
+          test "$version" = "${{ inputs.expected_version }}"
+          test "$(git rev-parse HEAD)" = "${{ inputs.expected_source_sha }}"
+
+  release-checks:
+    needs: validate-release-inputs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Validate product and optional quality inputs
+        run: |
+          set -euo pipefail
+          git diff --check HEAD
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e PYTHONPYCACHEPREFIX=/tmp/xgc2-gazebo-sim-mecanum-pycache \
+            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            ros:noetic-ros-base-focal bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                gazebo11 libxml2-utils ros-noetic-xacro
+              cd /workspace/repo
+              .xgc2/scripts/check_package_compliance.sh
+            '
+          if [[ "${{ inputs.run_cpp_quality }}" == true ]]; then
+            grep -RIn '[[:blank:]]$' src CMakeLists.txt package.xml && exit 1 || true
+          fi
+          if [[ "${{ inputs.run_source_tests }}" == true ]]; then
+            .xgc2/scripts/build_debs_in_docker.sh \
+              --work-dir "$RUNNER_TEMP/mecanum-source-tests" \
+              --output-dir "$RUNNER_TEMP/mecanum-source-debs" --skip-install-check
+          fi
+
+  build-debs:
+    needs: validate-release-inputs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-latest}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and install-check Debian artifact
+        run: |
+          install -d "$GITHUB_WORKSPACE/.ci/build-manifests"
+          .xgc2/scripts/build_debs_in_docker.sh \
+            --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-mecanum-${{ matrix.arch }}" \
+            --output-dir "$GITHUB_WORKSPACE/debs"
+      - name: Create release-train build manifest
+        run: |
+          python3 .xgc2/scripts/xgc2_artifact_manifest.py build \
+            --deb-dir debs --output-dir .ci/build-manifests \
+            --product xgc2-gazebo-sim-mecanum \
+            --product-version "${{ inputs.expected_version }}" \
+            --distribution focal --architecture "${{ matrix.arch }}" \
+            --source-sha "${{ inputs.expected_source_sha }}" \
+            --ci-run-id "$GITHUB_RUN_ID" --ci-workflow "$GITHUB_WORKFLOW" \
+            --ci-workflow-ref "$GITHUB_WORKFLOW_REF"
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.prepare_action == 'release' }}
+        with:
+          name: xgc2-gazebo-sim-mecanum-release-debs-${{ matrix.arch }}
+          path: |
+            debs/*.deb
+            .ci/build-manifests/*.json
+          include-hidden-files: true
+          retention-days: 14

@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Validate source and product contracts
+        run: |
+          set -euo pipefail
+          git diff --check HEAD
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e PYTHONPYCACHEPREFIX=/tmp/xgc2-gazebo-sim-mecanum-pycache \
+            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            ros:noetic-ros-base-focal bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y --no-install-recommends gazebo11 libxml2-utils ros-noetic-xacro
+              cd /workspace/repo
+              .xgc2/scripts/check_package_compliance.sh
+            '
+
+  build-debs:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-latest}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Build, test, and package Debian artifact
+        run: |
+          install -d "$GITHUB_WORKSPACE/.ci/build-manifests"
+          .xgc2/scripts/build_debs_in_docker.sh \
+            --work-dir "$RUNNER_TEMP/xgc2-gazebo-sim-mecanum-${{ matrix.arch }}" \
+            --output-dir "$GITHUB_WORKSPACE/debs"
+      - name: Create trusted build manifest
+        run: |
+          version="$(awk -F': *' '/^version:/ {print $2; exit}' .xgc2/product.yml)"
+          python3 .xgc2/scripts/xgc2_artifact_manifest.py build \
+            --deb-dir debs --output-dir .ci/build-manifests \
+            --product xgc2-gazebo-sim-mecanum --product-version "$version" \
+            --distribution focal --architecture "${{ matrix.arch }}" \
+            --source-sha "$GITHUB_SHA" --ci-run-id "$GITHUB_RUN_ID" \
+            --ci-workflow "$GITHUB_WORKFLOW" --ci-workflow-ref "$GITHUB_WORKFLOW_REF"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xgc2-gazebo-sim-mecanum-debs-${{ matrix.arch }}
+          path: |
+            debs/*.deb
+            .ci/build-manifests/*.json
+          include-hidden-files: true
+          retention-days: 14

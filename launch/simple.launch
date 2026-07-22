@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="ns" default="ugv1"/>
+  <arg name="model_name" default="$(arg ns)"/>
+  <arg name="world_name" default="$(find gazebo_sim_worlds)/worlds/empty/empty.world"/>
+  <arg name="gui" default="true"/>
+  <arg name="paused" default="false"/>
+  <arg name="x" default="0.0"/>
+  <arg name="y" default="0.0"/>
+  <arg name="z" default="0.0"/>
+  <arg name="yaw" default="0.0"/>
+  <arg name="v_front_max_m_s" default="1.5"/>
+  <arg name="v_left_max_m_s" default="1.5"/>
+  <arg name="omega_max_deg_s" default="90.0"/>
+  <arg name="linear_vel_scale" default="1.0"/>
+  <arg name="angular_vel_scale" default="1.0"/>
+  <arg name="use_imu_orientation" default="false"/>
+  <arg name="state_publish_rate" default="100.0"/>
+  <arg name="visualize_max_freq" default="20.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_name)"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+
+  <include file="$(dirname)/spawn.launch">
+    <arg name="ns" value="$(arg ns)"/>
+    <arg name="model_name" value="$(arg model_name)"/>
+    <arg name="x" value="$(arg x)"/>
+    <arg name="y" value="$(arg y)"/>
+    <arg name="z" value="$(arg z)"/>
+    <arg name="yaw" value="$(arg yaw)"/>
+    <arg name="bond" value="false"/>
+    <arg name="v_front_max_m_s" value="$(arg v_front_max_m_s)"/>
+    <arg name="v_left_max_m_s" value="$(arg v_left_max_m_s)"/>
+    <arg name="omega_max_deg_s" value="$(arg omega_max_deg_s)"/>
+    <arg name="linear_vel_scale" value="$(arg linear_vel_scale)"/>
+    <arg name="angular_vel_scale" value="$(arg angular_vel_scale)"/>
+    <arg name="use_imu_orientation" value="$(arg use_imu_orientation)"/>
+    <arg name="state_publish_rate" value="$(arg state_publish_rate)"/>
+    <arg name="visualize_max_freq" value="$(arg visualize_max_freq)"/>
+  </include>
+</launch>

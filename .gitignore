@@ -1,0 +1,10 @@
+/.catkin_tools/
+/.ci/
+/.work/
+/build/
+/debs/
+/devel/
+/install/
+/install-root/
+*.pyc
+__pycache__/
