@@ -46,8 +46,19 @@ docker run --rm \
         sleep "$((attempt * 5))"
       done
     }
+    apt_install() {
+      local attempt
+      for attempt in 1 2 3; do
+        if apt-get install "$@"; then
+          return 0
+        fi
+        [[ "${attempt}" -lt 3 ]] || return 1
+        sleep "$((attempt * 5))"
+        apt_update
+      done
+    }
     apt_update
-    apt-get install -y --no-install-recommends ca-certificates
+    apt_install -y --no-install-recommends ca-certificates
     echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
       >/etc/apt/sources.list.d/xgc2.list
     if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
@@ -55,7 +66,7 @@ docker run --rm \
         /etc/apt/sources.list.d/xgc2.list >/etc/apt/sources.list.d/00-xgc2-release-train.list
     fi
     apt_update
-    apt-get install -y --no-install-recommends \
+    apt_install -y --no-install-recommends \
       build-essential cmake dpkg-dev fakeroot file git libxml2-utils rsync \
       gazebo11 libgazebo11-dev \
       ros-noetic-gazebo-msgs ros-noetic-gazebo-ros \
@@ -78,7 +89,7 @@ docker run --rm \
     /workspace/repo/.xgc2/scripts/package_debs.sh \
       --install-root /workspace/work/install-root --output-dir /workspace/out
     if [[ "${INSTALL_CHECK}" == true ]]; then
-      apt-get install -y /workspace/out/ros-noetic-xgc2-gazebo-sim-mecanum_*.deb
+      apt_install -y /workspace/out/ros-noetic-xgc2-gazebo-sim-mecanum_*.deb
       /workspace/repo/.xgc2/scripts/check_installed_packages.sh
     fi
   '
