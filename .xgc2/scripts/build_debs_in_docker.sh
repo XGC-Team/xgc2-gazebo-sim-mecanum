@@ -31,12 +31,22 @@ docker run --rm \
     set -euo pipefail
     sed -i \
       -e "s#http://archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
-      -e "s#http://security.ubuntu.com/ubuntu#https://security.ubuntu.com/ubuntu#g" \
+      -e "s#http://security.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
       -e "s#http://ports.ubuntu.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g" \
       /etc/apt/sources.list
     printf "%s\n" "Acquire::Retries \"5\";" \
       >/etc/apt/apt.conf.d/99-xgc2-retries
-    apt-get update
+    apt_update() {
+      local attempt
+      for attempt in 1 2 3; do
+        if apt-get update; then
+          return 0
+        fi
+        [[ "${attempt}" -lt 3 ]] || return 1
+        sleep "$((attempt * 5))"
+      done
+    }
+    apt_update
     apt-get install -y --no-install-recommends ca-certificates
     echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
       >/etc/apt/sources.list.d/xgc2.list
@@ -44,7 +54,7 @@ docker run --rm \
       sed "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" \
         /etc/apt/sources.list.d/xgc2.list >/etc/apt/sources.list.d/00-xgc2-release-train.list
     fi
-    apt-get update
+    apt_update
     apt-get install -y --no-install-recommends \
       build-essential cmake dpkg-dev fakeroot file git libxml2-utils rsync \
       gazebo11 libgazebo11-dev \

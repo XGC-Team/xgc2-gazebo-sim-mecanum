@@ -104,12 +104,22 @@ jobs:
               set -euo pipefail
               sed -i \
                 -e "s#http://archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
-                -e "s#http://security.ubuntu.com/ubuntu#https://security.ubuntu.com/ubuntu#g" \
+                -e "s#http://security.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
                 -e "s#http://ports.ubuntu.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g" \
                 /etc/apt/sources.list
               printf "%s\n" "Acquire::Retries \"5\";" \
                 >/etc/apt/apt.conf.d/99-xgc2-retries
-              apt-get update
+              apt_update() {
+                local attempt
+                for attempt in 1 2 3; do
+                  if apt-get update; then
+                    return 0
+                  fi
+                  [[ "${attempt}" -lt 3 ]] || return 1
+                  sleep "$((attempt * 5))"
+                done
+              }
+              apt_update
               apt-get install -y --no-install-recommends \
                 gazebo11 libxml2-utils ros-noetic-xacro
               cd /workspace/repo
