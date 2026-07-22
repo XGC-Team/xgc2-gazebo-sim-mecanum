@@ -29,6 +29,13 @@ docker run --rm \
   -v "${OUTPUT_DIR}:/workspace/out" \
   "${DOCKER_IMAGE}" bash -lc '
     set -euo pipefail
+    sed -i \
+      -e "s#http://archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
+      -e "s#http://security.ubuntu.com/ubuntu#https://security.ubuntu.com/ubuntu#g" \
+      -e "s#http://ports.ubuntu.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g" \
+      /etc/apt/sources.list
+    printf "%s\n" "Acquire::Retries \"5\";" \
+      >/etc/apt/apt.conf.d/99-xgc2-retries
     apt-get update
     apt-get install -y --no-install-recommends ca-certificates
     echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \

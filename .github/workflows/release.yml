@@ -102,6 +102,13 @@ jobs:
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             ros:noetic-ros-base-focal bash -lc '
               set -euo pipefail
+              sed -i \
+                -e "s#http://archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
+                -e "s#http://security.ubuntu.com/ubuntu#https://security.ubuntu.com/ubuntu#g" \
+                -e "s#http://ports.ubuntu.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g" \
+                /etc/apt/sources.list
+              printf "%s\n" "Acquire::Retries \"5\";" \
+                >/etc/apt/apt.conf.d/99-xgc2-retries
               apt-get update
               apt-get install -y --no-install-recommends \
                 gazebo11 libxml2-utils ros-noetic-xacro
