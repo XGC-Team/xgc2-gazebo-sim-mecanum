@@ -64,4 +64,21 @@ if(CATKIN_ENABLE_TESTING)
   roslaunch_add_file_check(launch)
   add_rostest(test/ideal_drive.test)
   add_rostest(test/high_fidelity_drive.test)
+
+  # Both contracts start Gazebo and claim the global default ROS master.
+  # Keep every catkin and CTest entry point serialized around that shared
+  # integration environment.
+  set_tests_properties(
+    _ctest_gazebo_sim_mecanum_rostest_test_ideal_drive.test
+    _ctest_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
+    PROPERTIES RUN_SERIAL TRUE
+  )
+  add_dependencies(
+    run_tests_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
+    run_tests_gazebo_sim_mecanum_rostest_test_ideal_drive.test
+  )
+  add_dependencies(
+    _run_tests_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
+    _run_tests_gazebo_sim_mecanum_rostest_test_ideal_drive.test
+  )
 endif()

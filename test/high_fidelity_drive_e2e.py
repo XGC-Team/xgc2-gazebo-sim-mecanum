@@ -84,7 +84,7 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         with self.lock:
             self.twists.clear()
 
-    def test_01_first_order_response_and_private_wheel_state(self):
+    def test_01_first_order_response_and_renderer_wheel_state(self):
         self.publish_command(0.0, 0.0, 0.0, 0.8)
         self.clear_twists()
         self.publish_command(0.8, 0.0, 0.0, 1.5)
@@ -108,8 +108,9 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         # The public state remains a low-rate renderer contract. Simulator
         # wheel rates and efforts stay private to the dynamics plugin.
         self.assertEqual(len(joint_state.name), 4)
-        self.assertEqual(joint_state.velocity, [])
-        self.assertEqual(joint_state.effort, [])
+        self.assertEqual(len(joint_state.position), 4)
+        self.assertFalse(joint_state.velocity)
+        self.assertFalse(joint_state.effort)
         published_topics = dict(rospy.get_published_topics())
         self.assertFalse(any(topic.startswith("/ugv1/wheel_") for topic in published_topics))
 
