@@ -82,4 +82,4 @@ release:
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
   apt_versions:
-    focal: 0.1.0-7
+    focal: 0.1.0-5

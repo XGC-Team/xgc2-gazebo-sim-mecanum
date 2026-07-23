@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -64,18 +64,21 @@ std::string TrimSlashes(std::string value) {
 // requested body velocity, while the default high-fidelity mode closes four
 // wheel-speed loops and converts wheel/ground slip into bounded Mecanum forces.
 class MecanumContractPlugin final : public gazebo::ModelPlugin {
- public:
-  MecanumContractPlugin() = default;
+ private:
+  // Gazebo disconnects future event delivery without joining a callback that
+  // was already selected. The callback owns this gate and never dereferences
+  // the plugin outside its lock, so Shutdown can drain that final callback.
+  struct UpdateGate {
+    explicit UpdateGate(MecanumContractPlugin* initial_owner) : owner(initial_owner) {}
 
-  ~MecanumContractPlugin() override {
-    update_connection_.reset();
-    command_subscriber_.shutdown();
-    if (command_spinner_) {
-      command_spinner_->stop();
-      command_spinner_.reset();
-    }
-    ros_node_.reset();
-  }
+    std::mutex mutex;
+    MecanumContractPlugin* owner;
+  };
+
+ public:
+  MecanumContractPlugin() : update_gate_(std::make_shared<UpdateGate>(this)) {}
+
+  ~MecanumContractPlugin() override { Shutdown(); }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override {
     model_ = std::move(model);
@@ -188,8 +191,14 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     }
     tf_child_frame_ += "/" + base_frame_;
 
-    update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
-        std::bind(&MecanumContractPlugin::OnUpdate, this, std::placeholders::_1));
+    const auto update_gate = update_gate_;
+    update_connection_ =
+        gazebo::event::Events::ConnectWorldUpdateBegin([update_gate](const gazebo::common::UpdateInfo& info) {
+          std::lock_guard<std::mutex> lock(update_gate->mutex);
+          if (update_gate->owner) {
+            update_gate->owner->OnUpdate(info);
+          }
+        });
 
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
                                                     << ros_node_->getNamespace() << "' drive_model='"
@@ -206,7 +215,44 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
  private:
+  void Shutdown() {
+    if (shutting_down_.exchange(true, std::memory_order_acq_rel)) {
+      return;
+    }
+
+    update_connection_.reset();
+    const auto update_gate = update_gate_;
+    if (update_gate) {
+      std::lock_guard<std::mutex> lock(update_gate->mutex);
+      update_gate->owner = nullptr;
+    }
+
+    command_queue_.disable();
+    command_subscriber_.shutdown();
+    if (command_spinner_) {
+      command_spinner_->stop();
+      command_spinner_.reset();
+    }
+    command_queue_.clear();
+
+    joint_states_publisher_.shutdown();
+    imu_publisher_.shutdown();
+    twist_publisher_.shutdown();
+    pose_publisher_.shutdown();
+    ros_node_.reset();
+
+    for (auto& joint : wheel_joints_) {
+      joint.reset();
+    }
+    body_link_.reset();
+    model_.reset();
+    update_gate_.reset();
+  }
+
   void CommandCallback(const geometry_msgs::Twist::ConstPtr& command) {
+    if (shutting_down_.load(std::memory_order_acquire)) {
+      return;
+    }
     std::lock_guard<std::mutex> lock(command_mutex_);
     front_velocity_command_ = linear_scale_ * ClampFinite(command->linear.x, max_front_velocity_);
     left_velocity_command_ = linear_scale_ * ClampFinite(command->linear.y, max_left_velocity_);
@@ -214,7 +260,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
   void OnUpdate(const gazebo::common::UpdateInfo& info) {
-    if (!ros_node_ || !ros::ok()) {
+    if (shutting_down_.load(std::memory_order_acquire) || !ros_node_ || !ros::ok()) {
       return;
     }
     const double now = info.simTime.Double();
@@ -420,6 +466,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   gazebo::physics::ModelPtr model_;
   gazebo::physics::LinkPtr body_link_;
   std::array<gazebo::physics::JointPtr, kWheelCount> wheel_joints_{};
+  std::atomic<bool> shutting_down_{false};
+  std::shared_ptr<UpdateGate> update_gate_;
   gazebo::event::ConnectionPtr update_connection_;
   std::unique_ptr<ros::NodeHandle> ros_node_;
   ros::CallbackQueue command_queue_;

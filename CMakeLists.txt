@@ -39,7 +39,9 @@ install(TARGETS gazebo_sim_mecanum_contract
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-catkin_install_python(PROGRAMS scripts/check_model_ready.py
+catkin_install_python(PROGRAMS
+  scripts/check_model_ready.py
+  scripts/model_lifecycle.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

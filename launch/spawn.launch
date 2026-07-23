@@ -7,7 +7,6 @@
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.0"/>
   <arg name="yaw" default="0.0"/>
-  <arg name="bond" default="true"/>
   <arg name="v_front_max_m_s" default="1.5"/>
   <arg name="v_left_max_m_s" default="1.5"/>
   <arg name="omega_max_deg_s" default="90.0"/>
@@ -16,6 +15,8 @@
   <arg name="use_imu_orientation" default="false"/>
   <arg name="state_publish_rate" default="100.0"/>
   <arg name="visualize_max_freq" default="20.0"/>
+  <arg name="plugin_filename" default="libgazebo_sim_mecanum_contract.so"/>
+  <arg name="mesh_prefix" default="model://mecanum_description/meshes"/>
 
   <group ns="$(arg ns)">
     <param name="v_front_max_m_s" value="$(arg v_front_max_m_s)"/>
@@ -29,16 +30,14 @@
   </group>
 
   <param name="/$(arg ns)/gazebo_model_sdf"
-         command="$(find xacro)/xacro $(find gazebo_sim_mecanum)/models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=$(arg ns) drive_model:=$(arg drive_model)"/>
-  <node if="$(arg bond)" pkg="gazebo_ros" type="spawn_model"
-        name="spawn_$(arg model_name)" output="screen"
-        args="-sdf -param /$(arg ns)/gazebo_model_sdf
-              -model $(arg model_name)
-              -x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg yaw)
-              -b"/>
-  <node unless="$(arg bond)" pkg="gazebo_ros" type="spawn_model"
+         command="$(find xacro)/xacro $(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=$(arg ns) drive_model:=$(arg drive_model) plugin_filename:=$(arg plugin_filename) mesh_prefix:=$(arg mesh_prefix)"/>
+  <node pkg="gazebo_ros" type="spawn_model"
         name="spawn_$(arg model_name)" output="screen"
         args="-sdf -param /$(arg ns)/gazebo_model_sdf
               -model $(arg model_name)
               -x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg yaw)"/>
+  <group ns="$(arg ns)">
+    <node pkg="gazebo_sim_mecanum" type="model_lifecycle.py"
+          name="model_lifecycle" output="screen"/>
+  </group>
 </launch>

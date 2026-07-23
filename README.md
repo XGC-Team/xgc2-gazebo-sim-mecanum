@@ -58,4 +58,8 @@ rostopic pub -r 20 /ugv1/cmd_vel geometry_msgs/Twist \
 
 For an existing Gazebo server, use `spawn.launch`. Multiple robots require a
 unique `ns` and `model_name` for each instance. Set `drive_model:=ideal` per
-robot when a lightweight model is preferred.
+robot when a lightweight model is preferred. Packaged process definitions pin
+the installed launch file, model meshes, and Gazebo plugin to their canonical
+absolute paths. Source development stages a separate immutable release pointing
+directly at the checked-out `spawn.launch`, mesh directory, and freshly built
+plugin; it never falls back to a stale or missing `/opt` package.

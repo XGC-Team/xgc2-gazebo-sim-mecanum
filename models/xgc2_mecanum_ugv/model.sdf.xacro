@@ -2,6 +2,8 @@
 <sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="robot_namespace" default="ugv1"/>
   <xacro:arg name="drive_model" default="high_fidelity"/>
+  <xacro:arg name="plugin_filename" default="libgazebo_sim_mecanum_contract.so"/>
+  <xacro:arg name="mesh_prefix" default="model://mecanum_description/meshes"/>
   <xacro:property name="xgc_pi" value="3.141592653589793"/>
   <xacro:property name="high_fidelity" value="${'$(arg drive_model)' == 'high_fidelity'}"/>
 
@@ -77,7 +79,7 @@
 
       <visual name="base_link">
         <pose>0 0 0.05 0 0 0</pose>
-        <geometry><mesh><uri>model://mecanum_description/meshes/nexus_base_link.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <geometry><mesh><uri>$(arg mesh_prefix)/nexus_base_link.STL</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
         <material><ambient>0.9 0.8 0.6 1</ambient><diffuse>0.9 0.8 0.6 1</diffuse></material>
       </visual>
 
@@ -88,22 +90,22 @@
           <material><ambient>${color}</ambient><diffuse>${color}</diffuse></material>
         </visual>
       </xacro:macro>
-      <xacro:fixed_visual name="upper_left_wheel_shaft" pose="0.150 0.108 0.05 0 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="lower_left_wheel_shaft" pose="-0.150 0.108 0.05 0 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="upper_right_wheel_shaft" pose="0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="lower_right_wheel_shaft" pose="-0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="upper_left_wheel_shaft" pose="0.150 0.108 0.05 0 0 0" uri="$(arg mesh_prefix)/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="lower_left_wheel_shaft" pose="-0.150 0.108 0.05 0 0 0" uri="$(arg mesh_prefix)/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="upper_right_wheel_shaft" pose="0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="$(arg mesh_prefix)/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="lower_right_wheel_shaft" pose="-0.150 -0.108 0.05 ${xgc_pi} 0 0" uri="$(arg mesh_prefix)/wheel_shaft.STL" color="0.15 0.15 0.15 1"/>
 
       <xacro:unless value="${high_fidelity}">
-        <xacro:fixed_visual name="upper_left_wheel" pose="0.150 0.150 0.05 0 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
-        <xacro:fixed_visual name="lower_left_wheel" pose="-0.150 0.150 0.05 0 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
-        <xacro:fixed_visual name="upper_right_wheel" pose="0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
-        <xacro:fixed_visual name="lower_right_wheel" pose="-0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="model://mecanum_description/meshes/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="upper_left_wheel" pose="0.150 0.150 0.05 0 0 0" uri="$(arg mesh_prefix)/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="lower_left_wheel" pose="-0.150 0.150 0.05 0 0 0" uri="$(arg mesh_prefix)/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="upper_right_wheel" pose="0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="$(arg mesh_prefix)/mecanum_wheel_right.STL" color="0.6 0.6 0.6 1"/>
+        <xacro:fixed_visual name="lower_right_wheel" pose="-0.150 -0.150 0.05 ${xgc_pi} 0 0" uri="$(arg mesh_prefix)/mecanum_wheel_left.STL" color="0.6 0.6 0.6 1"/>
       </xacro:unless>
 
-      <xacro:fixed_visual name="front_sensor" pose="0.205 0 0.06 ${xgc_pi / 2.0} 0 0" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="left_sensor" pose="0 0.108 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi / 2.0}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="right_sensor" pose="0 -0.108 0.06 ${xgc_pi / 2.0} 0 ${-xgc_pi / 2.0}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
-      <xacro:fixed_visual name="rear_sensor" pose="-0.201 0 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi}" uri="model://mecanum_description/meshes/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="front_sensor" pose="0.205 0 0.06 ${xgc_pi / 2.0} 0 0" uri="$(arg mesh_prefix)/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="left_sensor" pose="0 0.108 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi / 2.0}" uri="$(arg mesh_prefix)/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="right_sensor" pose="0 -0.108 0.06 ${xgc_pi / 2.0} 0 ${-xgc_pi / 2.0}" uri="$(arg mesh_prefix)/urm04.STL" color="0.15 0.15 0.15 1"/>
+      <xacro:fixed_visual name="rear_sensor" pose="-0.201 0 0.06 ${xgc_pi / 2.0} 0 ${xgc_pi}" uri="$(arg mesh_prefix)/urm04.STL" color="0.15 0.15 0.15 1"/>
       <visual name="stereo_camera">
         <pose>0.205 0 0.06 0 0 0</pose>
         <geometry><box><size>0.02 0.08 0.01</size></box></geometry>
@@ -112,13 +114,13 @@
     </link>
 
     <xacro:if value="${high_fidelity}">
-      <xacro:wheel name="upper_left_wheel" x="0.150" y="0.150" axis_y="1" roll="0" mesh="model://mecanum_description/meshes/mecanum_wheel_left.STL"/>
-      <xacro:wheel name="upper_right_wheel" x="0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="model://mecanum_description/meshes/mecanum_wheel_right.STL"/>
-      <xacro:wheel name="lower_left_wheel" x="-0.150" y="0.150" axis_y="1" roll="0" mesh="model://mecanum_description/meshes/mecanum_wheel_right.STL"/>
-      <xacro:wheel name="lower_right_wheel" x="-0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="model://mecanum_description/meshes/mecanum_wheel_left.STL"/>
+      <xacro:wheel name="upper_left_wheel" x="0.150" y="0.150" axis_y="1" roll="0" mesh="$(arg mesh_prefix)/mecanum_wheel_left.STL"/>
+      <xacro:wheel name="upper_right_wheel" x="0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="$(arg mesh_prefix)/mecanum_wheel_right.STL"/>
+      <xacro:wheel name="lower_left_wheel" x="-0.150" y="0.150" axis_y="1" roll="0" mesh="$(arg mesh_prefix)/mecanum_wheel_right.STL"/>
+      <xacro:wheel name="lower_right_wheel" x="-0.150" y="-0.150" axis_y="-1" roll="${xgc_pi}" mesh="$(arg mesh_prefix)/mecanum_wheel_left.STL"/>
     </xacro:if>
 
-    <plugin name="mecanum_contract" filename="libgazebo_sim_mecanum_contract.so">
+    <plugin name="mecanum_contract" filename="$(arg plugin_filename)">
       <robotNamespace>$(arg robot_namespace)</robotNamespace>
       <driveModel>$(arg drive_model)</driveModel>
       <commandTopic>cmd_vel</commandTopic><poseTopic>pose</poseTopic><twistTopic>twist</twistTopic>
