@@ -215,6 +215,470 @@
       },
       "digest": "",
       "internal": false
+    },
+    {
+      "id": "mecanum-gazebo-robot",
+      "version": "0.3.0",
+      "label": "Mecanum Gazebo robot",
+      "description": "One selectable high-fidelity or ideal Mecanum model attached to an existing Gazebo Classic server.",
+      "drivers": [
+        "host"
+      ],
+      "parameters": {
+        "properties": {
+          "gazeboMasterPort": {
+            "type": "integer",
+            "default": 11345,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "driveModel": {
+            "type": "string",
+            "description": "Gazebo drive dynamics",
+            "enum": [
+              "high_fidelity",
+              "ideal"
+            ],
+            "default": "high_fidelity"
+          },
+          "modelName": {
+            "type": "string",
+            "description": "Unique Gazebo model name",
+            "default": "ugv1"
+          },
+          "namespace": {
+            "type": "string",
+            "description": "ROS namespace without a leading slash",
+            "default": "ugv1"
+          },
+          "rosMasterPort": {
+            "type": "integer",
+            "default": 11311,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "spawnX": {
+            "type": "number",
+            "default": 0
+          },
+          "spawnY": {
+            "type": "number",
+            "default": 0
+          },
+          "spawnYaw": {
+            "type": "number",
+            "default": 0,
+            "minimum": -6.283185307179586,
+            "maximum": 6.283185307179586
+          },
+          "spawnZ": {
+            "type": "number",
+            "default": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "resourceClaims": [
+        {
+          "bindingKey": "robot",
+          "kind": "robot",
+          "mode": "",
+          "capacity": 0,
+          "identityParts": [
+            {
+              "parameter": "modelName"
+            }
+          ]
+        },
+        {
+          "bindingKey": "gazebo-model",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "gazebo-model",
+          "identityParts": [
+            {
+              "parameter": "gazeboMasterPort"
+            },
+            {
+              "parameter": "modelName"
+            }
+          ]
+        },
+        {
+          "bindingKey": "ros-stack",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "ros-stack",
+          "identityParts": [
+            {
+              "parameter": "rosMasterPort"
+            },
+            {
+              "parameter": "namespace"
+            },
+            {
+              "literal": "mecanum"
+            }
+          ]
+        }
+      ],
+      "command": {
+        "executable": "/opt/ros/noetic/bin/roslaunch",
+        "args": [
+          "/opt/ros/noetic/share/gazebo_sim_mecanum/launch/spawn.launch",
+          "ns:=${namespace}",
+          "model_name:=${modelName}",
+          "drive_model:=${driveModel}",
+          "x:=${spawnX}",
+          "y:=${spawnY}",
+          "z:=${spawnZ}",
+          "yaw:=${spawnYaw}",
+          "plugin_filename:=/opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so",
+          "mesh_prefix:=file:///opt/ros/noetic/share/mecanum_description/meshes"
+        ],
+        "env": {
+          "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+          "GAZEBO_MASTER_URI": "http://127.0.0.1:${gazeboMasterPort}",
+          "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+          "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+          "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+          "ROS_DISTRO": "noetic",
+          "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+          "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+          "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+          "ROS_PYTHON_VERSION": "3",
+          "ROS_ROOT": "/opt/ros/noetic/share/ros",
+          "ROS_VERSION": "1"
+        }
+      },
+      "beforeStart": {
+        "command": {
+          "executable": "/usr/bin/python3",
+          "args": [
+            "-c",
+            "import fcntl,json,os,stat,subprocess,sys\nmode=\"strict\"\ntry:\n    rosservice,model,raw_port,mode=sys.argv[1:]\n    if mode not in (\"strict\",\"best-effort\"):\n        raise ValueError(\"invalid Gazebo cleanup mode: \"+mode)\n    uid=os.getuid()\n    port=int(raw_port)\n    lock_path=f\"/tmp/xgc2-gazebo-delete-model-u{uid}-ros-p{port}.lock\"\n    fd=os.open(lock_path,os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,0o600)\n    try:\n        info=os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != uid:\n            raise PermissionError(f\"unsafe Gazebo delete-model lock: {lock_path}\")\n        fcntl.flock(fd,fcntl.LOCK_EX)\n        try:\n            result=subprocess.run([rosservice,\"call\",\"/gazebo/delete_model\",json.dumps({\"model_name\":model},separators=(\",\",\":\"))],timeout=4,check=False)\n        finally:\n            fcntl.flock(fd,fcntl.LOCK_UN)\n    finally:\n        os.close(fd)\n    if result.returncode != 0:\n        raise subprocess.CalledProcessError(result.returncode,result.args)\nexcept BaseException:\n    if mode == \"best-effort\":\n        raise SystemExit(0)\n    raise\n",
+            "/opt/ros/noetic/bin/rosservice",
+            "${modelName}",
+            "${rosMasterPort}",
+            "strict"
+          ],
+          "directExecutable": true,
+          "env": {
+            "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+            "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+            "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+            "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+            "ROS_DISTRO": "noetic",
+            "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+            "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+            "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_ROOT": "/opt/ros/noetic/share/ros",
+            "ROS_VERSION": "1"
+          }
+        },
+        "timeout": 45000000000
+      },
+      "beforeStop": {
+        "command": {
+          "executable": "/usr/bin/python3",
+          "args": [
+            "-c",
+            "import fcntl,json,os,stat,subprocess,sys\nmode=\"strict\"\ntry:\n    rosservice,model,raw_port,mode=sys.argv[1:]\n    if mode not in (\"strict\",\"best-effort\"):\n        raise ValueError(\"invalid Gazebo cleanup mode: \"+mode)\n    uid=os.getuid()\n    port=int(raw_port)\n    lock_path=f\"/tmp/xgc2-gazebo-delete-model-u{uid}-ros-p{port}.lock\"\n    fd=os.open(lock_path,os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,0o600)\n    try:\n        info=os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != uid:\n            raise PermissionError(f\"unsafe Gazebo delete-model lock: {lock_path}\")\n        fcntl.flock(fd,fcntl.LOCK_EX)\n        try:\n            result=subprocess.run([rosservice,\"call\",\"/gazebo/delete_model\",json.dumps({\"model_name\":model},separators=(\",\",\":\"))],timeout=4,check=False)\n        finally:\n            fcntl.flock(fd,fcntl.LOCK_UN)\n    finally:\n        os.close(fd)\n    if result.returncode != 0:\n        raise subprocess.CalledProcessError(result.returncode,result.args)\nexcept BaseException:\n    if mode == \"best-effort\":\n        raise SystemExit(0)\n    raise\n",
+            "/opt/ros/noetic/bin/rosservice",
+            "${modelName}",
+            "${rosMasterPort}",
+            "strict"
+          ],
+          "directExecutable": true,
+          "env": {
+            "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+            "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+            "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+            "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+            "ROS_DISTRO": "noetic",
+            "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+            "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+            "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_ROOT": "/opt/ros/noetic/share/ros",
+            "ROS_VERSION": "1"
+          }
+        },
+        "timeout": 45000000000
+      },
+      "readiness": {
+        "kind": "exec",
+        "command": {
+          "executable": "/opt/ros/noetic/lib/gazebo_sim_mecanum/check_model_ready.py",
+          "args": [
+            "${modelName}"
+          ],
+          "env": {
+            "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+            "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+            "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+            "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+            "ROS_DISTRO": "noetic",
+            "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+            "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+            "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_ROOT": "/opt/ros/noetic/share/ros",
+            "ROS_VERSION": "1"
+          }
+        },
+        "interval": 1000000000,
+        "timeout": 3000000000,
+        "successThreshold": 1,
+        "failureThreshold": 10
+      },
+      "liveness": {
+        "kind": "process",
+        "interval": 2000000000,
+        "timeout": 2000000000,
+        "successThreshold": 1,
+        "failureThreshold": 3
+      },
+      "stop": {
+        "gracePeriod": 5000000000
+      },
+      "restart": {
+        "mode": "never",
+        "maxRestarts": 0,
+        "backoff": 0
+      },
+      "digest": "",
+      "internal": false
+    },
+    {
+      "id": "mecanum-gazebo-robot",
+      "version": "0.4.0",
+      "label": "Mecanum Gazebo robot",
+      "description": "One selectable high-fidelity or ideal Mecanum model attached to an existing Gazebo Classic server.",
+      "drivers": [
+        "host"
+      ],
+      "parameters": {
+        "properties": {
+          "gazeboMasterPort": {
+            "type": "integer",
+            "default": 11345,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "driveModel": {
+            "type": "string",
+            "description": "Gazebo drive dynamics",
+            "enum": [
+              "high_fidelity",
+              "ideal"
+            ],
+            "default": "high_fidelity"
+          },
+          "modelName": {
+            "type": "string",
+            "description": "Unique Gazebo model name",
+            "default": "ugv1"
+          },
+          "namespace": {
+            "type": "string",
+            "description": "ROS namespace without a leading slash",
+            "default": "ugv1"
+          },
+          "rosMasterPort": {
+            "type": "integer",
+            "default": 11311,
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "spawnX": {
+            "type": "number",
+            "default": 0
+          },
+          "spawnY": {
+            "type": "number",
+            "default": 0
+          },
+          "spawnYaw": {
+            "type": "number",
+            "default": 0,
+            "minimum": -6.283185307179586,
+            "maximum": 6.283185307179586
+          },
+          "spawnZ": {
+            "type": "number",
+            "default": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "resourceClaims": [
+        {
+          "bindingKey": "robot",
+          "kind": "robot",
+          "mode": "",
+          "capacity": 0,
+          "identityParts": [
+            {
+              "parameter": "modelName"
+            }
+          ]
+        },
+        {
+          "bindingKey": "gazebo-model",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "gazebo-model",
+          "identityParts": [
+            {
+              "parameter": "gazeboMasterPort"
+            },
+            {
+              "parameter": "modelName"
+            }
+          ]
+        },
+        {
+          "bindingKey": "ros-stack",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "ros-stack",
+          "identityParts": [
+            {
+              "parameter": "rosMasterPort"
+            },
+            {
+              "parameter": "namespace"
+            },
+            {
+              "literal": "mecanum"
+            }
+          ]
+        }
+      ],
+      "command": {
+        "executable": "/opt/ros/noetic/bin/roslaunch",
+        "args": [
+          "/opt/ros/noetic/share/gazebo_sim_mecanum/launch/spawn.launch",
+          "ns:=${namespace}",
+          "model_name:=${modelName}",
+          "drive_model:=${driveModel}",
+          "x:=${spawnX}",
+          "y:=${spawnY}",
+          "z:=${spawnZ}",
+          "yaw:=${spawnYaw}",
+          "plugin_filename:=/opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so",
+          "mesh_prefix:=file:///opt/ros/noetic/share/mecanum_description/meshes"
+        ],
+        "env": {
+          "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+          "GAZEBO_MASTER_URI": "http://127.0.0.1:${gazeboMasterPort}",
+          "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+          "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+          "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+          "ROS_DISTRO": "noetic",
+          "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+          "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+          "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+          "ROS_PYTHON_VERSION": "3",
+          "ROS_ROOT": "/opt/ros/noetic/share/ros",
+          "ROS_VERSION": "1"
+        }
+      },
+      "beforeStart": {
+        "command": {
+          "executable": "/usr/bin/python3",
+          "args": [
+            "-c",
+            "import fcntl,json,os,stat,subprocess,sys\nmode=\"strict\"\ntry:\n    rosservice,model,raw_port,mode=sys.argv[1:]\n    if mode not in (\"strict\",\"best-effort\"):\n        raise ValueError(\"invalid Gazebo cleanup mode: \"+mode)\n    uid=os.getuid()\n    port=int(raw_port)\n    lock_path=f\"/tmp/xgc2-gazebo-delete-model-u{uid}-ros-p{port}.lock\"\n    fd=os.open(lock_path,os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,0o600)\n    try:\n        info=os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != uid:\n            raise PermissionError(f\"unsafe Gazebo delete-model lock: {lock_path}\")\n        fcntl.flock(fd,fcntl.LOCK_EX)\n        try:\n            result=subprocess.run([rosservice,\"call\",\"/gazebo/delete_model\",json.dumps({\"model_name\":model},separators=(\",\",\":\"))],timeout=4,check=False)\n        finally:\n            fcntl.flock(fd,fcntl.LOCK_UN)\n    finally:\n        os.close(fd)\n    if result.returncode != 0:\n        raise subprocess.CalledProcessError(result.returncode,result.args)\nexcept BaseException:\n    if mode == \"best-effort\":\n        raise SystemExit(0)\n    raise\n",
+            "/opt/ros/noetic/bin/rosservice",
+            "${modelName}",
+            "${rosMasterPort}",
+            "strict"
+          ],
+          "directExecutable": true,
+          "env": {
+            "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+            "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+            "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+            "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+            "ROS_DISTRO": "noetic",
+            "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+            "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+            "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_ROOT": "/opt/ros/noetic/share/ros",
+            "ROS_VERSION": "1"
+          }
+        },
+        "timeout": 45000000000
+      },
+      "beforeStop": {
+        "command": {
+          "executable": "/usr/bin/python3",
+          "args": [
+            "-c",
+            "import fcntl,json,os,stat,subprocess,sys\nmode=\"strict\"\ntry:\n    rosservice,model,raw_port,mode=sys.argv[1:]\n    if mode not in (\"strict\",\"best-effort\"):\n        raise ValueError(\"invalid Gazebo cleanup mode: \"+mode)\n    uid=os.getuid()\n    port=int(raw_port)\n    lock_path=f\"/tmp/xgc2-gazebo-delete-model-u{uid}-ros-p{port}.lock\"\n    fd=os.open(lock_path,os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,0o600)\n    try:\n        info=os.fstat(fd)\n        if not stat.S_ISREG(info.st_mode) or info.st_uid != uid:\n            raise PermissionError(f\"unsafe Gazebo delete-model lock: {lock_path}\")\n        fcntl.flock(fd,fcntl.LOCK_EX)\n        try:\n            result=subprocess.run([rosservice,\"call\",\"/gazebo/delete_model\",json.dumps({\"model_name\":model},separators=(\",\",\":\"))],timeout=4,check=False)\n        finally:\n            fcntl.flock(fd,fcntl.LOCK_UN)\n    finally:\n        os.close(fd)\n    if result.returncode != 0:\n        raise subprocess.CalledProcessError(result.returncode,result.args)\nexcept BaseException:\n    if mode == \"best-effort\":\n        raise SystemExit(0)\n    raise\n",
+            "/opt/ros/noetic/bin/rosservice",
+            "${modelName}",
+            "${rosMasterPort}",
+            "strict"
+          ],
+          "directExecutable": true,
+          "env": {
+            "CMAKE_PREFIX_PATH": "/opt/ros/noetic",
+            "LD_LIBRARY_PATH": "/opt/ros/noetic/lib:/opt/ros/noetic/lib/x86_64-linux-gnu:/opt/ros/noetic/lib/aarch64-linux-gnu",
+            "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "PKG_CONFIG_PATH": "/opt/ros/noetic/lib/pkgconfig",
+            "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+            "ROS_DISTRO": "noetic",
+            "ROS_ETC_DIR": "/opt/ros/noetic/etc/ros",
+            "ROS_MASTER_URI": "http://127.0.0.1:${rosMasterPort}",
+            "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+            "ROS_PYTHON_VERSION": "3",
+            "ROS_ROOT": "/opt/ros/noetic/share/ros",
+            "ROS_VERSION": "1"
+          }
+        },
+        "timeout": 45000000000
+      },
+      "readiness": {
+        "kind": "ros1-topic-message",
+        "address": "http://127.0.0.1:${rosMasterPort}",
+        "topic": "/${namespace}/pose",
+        "interval": 1000000000,
+        "timeout": 3000000000,
+        "successThreshold": 1,
+        "failureThreshold": 10
+      },
+      "liveness": {
+        "kind": "process",
+        "interval": 2000000000,
+        "timeout": 2000000000,
+        "successThreshold": 1,
+        "failureThreshold": 3
+      },
+      "stop": {
+        "gracePeriod": 5000000000
+      },
+      "restart": {
+        "mode": "never",
+        "maxRestarts": 0,
+        "backoff": 0
+      },
+      "digest": "",
+      "internal": false
     }
   ]
 }
