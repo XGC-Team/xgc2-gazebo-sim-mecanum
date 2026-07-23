@@ -43,8 +43,8 @@ for path in "${required[@]}"; do
 done
 
 grep -q '^id: xgc2-gazebo-sim-mecanum$' .xgc2/product.yml
-grep -q '^version: 0.1.0-4$' .xgc2/product.yml
-grep -q '^    focal: 0.1.0-4$' .xgc2/product.yml
+grep -q '^version: 0.1.0-7$' .xgc2/product.yml
+grep -q '^    focal: 0.1.0-7$' .xgc2/product.yml
 grep -q '<name>gazebo_sim_mecanum</name>' package.xml
 grep -q 'PACKAGE="ros-noetic-xgc2-gazebo-sim-mecanum"' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-rostest' .xgc2/scripts/package_debs.sh
