@@ -10,7 +10,6 @@ bash -n .xgc2/scripts/*.sh
 python3 -m py_compile scripts/check_model_ready.py scripts/model_lifecycle.py \
   test/ideal_drive_e2e.py test/high_fidelity_drive_e2e.py \
   .xgc2/scripts/xgc2_artifact_manifest.py
-python3 -m json.tool process-definitions/xgc2-gazebo-sim-mecanum.json >/dev/null
 
 required=(
   .github/workflows/ci.yml
@@ -31,7 +30,6 @@ required=(
   models/xgc2_mecanum_ugv/model.config
   models/xgc2_mecanum_ugv/model.sdf
   models/xgc2_mecanum_ugv/model.sdf.xacro
-  process-definitions/xgc2-gazebo-sim-mecanum.json
   scripts/check_model_ready.py
   scripts/model_lifecycle.py
   src/mecanum_contract_plugin.cpp
@@ -57,10 +55,6 @@ if grep -Eq '<arg name="bond"|(^|[[:space:]])-b([[:space:]]|")' launch/spawn.lau
   exit 1
 fi
 grep -q 'type="model_lifecycle.py"' launch/spawn.launch
-grep -q '"default": "high_fidelity"' process-definitions/xgc2-gazebo-sim-mecanum.json
-grep -q '"drive_model:=${driveModel}"' process-definitions/xgc2-gazebo-sim-mecanum.json
-grep -q '"plugin_filename:=/opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so"' process-definitions/xgc2-gazebo-sim-mecanum.json
-grep -q '"mesh_prefix:=file:///opt/ros/noetic/share/mecanum_description/meshes"' process-definitions/xgc2-gazebo-sim-mecanum.json
 grep -q '$(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro' launch/spawn.launch
 if grep -q '$(find gazebo_sim_mecanum)' launch/spawn.launch; then
   echo "Spawn launch must resolve its owned model relative to its canonical file" >&2

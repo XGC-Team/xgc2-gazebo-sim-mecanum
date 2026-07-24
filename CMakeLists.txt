@@ -56,10 +56,6 @@ install(FILES LICENSE MODEL_ASSET_NOTICE.md
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
-install(FILES process-definitions/xgc2-gazebo-sim-mecanum.json
-  DESTINATION /usr/share/xgc2/process-definitions
-)
-
 if(CATKIN_ENABLE_TESTING)
   find_package(roslaunch REQUIRED)
   find_package(rostest REQUIRED)

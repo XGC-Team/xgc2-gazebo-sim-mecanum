@@ -68,7 +68,6 @@ ownership:
   - /opt/ros/noetic/lib/gazebo_sim_mecanum
   - /opt/ros/noetic/share/gazebo_sim_mecanum
   - /opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so
-  - /usr/share/xgc2/process-definitions/xgc2-gazebo-sim-mecanum.json
 release:
   repository: lxk36/xgc2-gazebo-sim-mecanum
   ref: noetic
