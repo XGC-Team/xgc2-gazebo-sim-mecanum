@@ -12,7 +12,6 @@
     <arg name="ns" value="ugv1"/>
     <arg name="model_name" value="ugv1"/>
     <arg name="drive_model" value="high_fidelity"/>
-    <arg name="bond" value="false"/>
     <arg name="state_publish_rate" value="100.0"/>
     <arg name="visualize_max_freq" value="20.0"/>
   </include>

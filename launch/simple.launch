@@ -36,7 +36,6 @@
     <arg name="y" value="$(arg y)"/>
     <arg name="z" value="$(arg z)"/>
     <arg name="yaw" value="$(arg yaw)"/>
-    <arg name="bond" value="false"/>
     <arg name="v_front_max_m_s" value="$(arg v_front_max_m_s)"/>
     <arg name="v_left_max_m_s" value="$(arg v_left_max_m_s)"/>
     <arg name="omega_max_deg_s" value="$(arg omega_max_deg_s)"/>
