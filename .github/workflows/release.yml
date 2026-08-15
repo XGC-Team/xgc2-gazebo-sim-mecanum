@@ -29,16 +29,6 @@ on:
         required: false
         default: ""
         type: string
-      run_cpp_quality:
-        description: Run optional C++ quality checks
-        required: true
-        default: false
-        type: boolean
-      run_source_tests:
-        description: Run an additional source test build
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   actions: read
@@ -72,7 +62,6 @@ jobs:
             echo "apt_overlay_url requires a dependency_set_digest" >&2
             exit 1
           fi
-
   validate-release-inputs:
     needs: prepare-contract
     runs-on: ubuntu-latest
@@ -84,7 +73,6 @@ jobs:
           version="$(sed -nE 's|^version:[[:space:]]*([^[:space:]#]+).*|\1|p' .xgc2/product.yml | head -n1)"
           test "$version" = "${{ inputs.expected_version }}"
           test "$(git rev-parse HEAD)" = "${{ inputs.expected_source_sha }}"
-
   release-checks:
     needs: validate-release-inputs
     runs-on: ubuntu-latest
@@ -144,7 +132,6 @@ jobs:
               --work-dir "$RUNNER_TEMP/mecanum-source-tests" \
               --output-dir "$RUNNER_TEMP/mecanum-source-debs" --skip-install-check
           fi
-
   build-debs:
     needs: validate-release-inputs
     strategy:
@@ -181,3 +168,7 @@ jobs:
             .ci/build-manifests/*.json
           include-hidden-files: true
           retention-days: 14
+
+
+
+

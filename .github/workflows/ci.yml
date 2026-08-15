@@ -62,7 +62,6 @@ jobs:
               cd /workspace/repo
               .xgc2/scripts/check_package_compliance.sh
             '
-
   build-debs:
     strategy:
       fail-fast: false
@@ -98,3 +97,5 @@ jobs:
             .ci/build-manifests/*.json
           include-hidden-files: true
           retention-days: 14
+
+
