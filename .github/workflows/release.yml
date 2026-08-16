@@ -90,6 +90,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 bash -lc '
               set -euo pipefail
+              source /opt/ros/noetic/setup.bash
               cd /workspace/repo
               .xgc2/scripts/check_package_compliance.sh
             '
@@ -137,6 +138,5 @@ jobs:
             .ci/build-manifests/*.json
           include-hidden-files: true
           retention-days: 14
-
 
 

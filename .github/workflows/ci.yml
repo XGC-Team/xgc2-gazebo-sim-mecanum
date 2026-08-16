@@ -15,6 +15,7 @@ defaults:
 jobs:
   compliance:
     runs-on: ubuntu-latest
+    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,15 +24,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check HEAD
-          docker run --rm \
-            -e DEBIAN_FRONTEND=noninteractive \
-            -e PYTHONPYCACHEPREFIX=/tmp/xgc2-gazebo-sim-mecanum-pycache \
-            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
-            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 bash -lc '
-              set -euo pipefail
-              cd /workspace/repo
-              .xgc2/scripts/check_package_compliance.sh
-            '
+          source /opt/ros/noetic/setup.bash
+          command -v xacro >/dev/null
+          .xgc2/scripts/check_package_compliance.sh
   build-debs:
     strategy:
       fail-fast: false
@@ -67,4 +62,3 @@ jobs:
             .ci/build-manifests/*.json
           include-hidden-files: true
           retention-days: 14
-
