@@ -88,39 +88,8 @@ jobs:
             -e DEBIAN_FRONTEND=noninteractive \
             -e PYTHONPYCACHEPREFIX=/tmp/xgc2-gazebo-sim-mecanum-pycache \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
-            ros:noetic-ros-base-focal bash -lc '
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 bash -lc '
               set -euo pipefail
-              sed -i \
-                -e "s#http://archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
-                -e "s#http://security.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g" \
-                -e "s#http://ports.ubuntu.com/ubuntu-ports#https://ports.ubuntu.com/ubuntu-ports#g" \
-                /etc/apt/sources.list
-              printf "%s\n" "Acquire::Retries \"5\";" \
-                >/etc/apt/apt.conf.d/99-xgc2-retries
-              apt_update() {
-                local attempt
-                for attempt in 1 2 3; do
-                  if apt-get update; then
-                    return 0
-                  fi
-                  [[ "${attempt}" -lt 3 ]] || return 1
-                  sleep "$((attempt * 5))"
-                done
-              }
-              apt_install() {
-                local attempt
-                for attempt in 1 2 3; do
-                  if apt-get install "$@"; then
-                    return 0
-                  fi
-                  [[ "${attempt}" -lt 3 ]] || return 1
-                  sleep "$((attempt * 5))"
-                  apt_update
-                done
-              }
-              apt_update
-              apt_install -y --no-install-recommends \
-                gazebo11 libxml2-utils ros-noetic-xacro
               cd /workspace/repo
               .xgc2/scripts/check_package_compliance.sh
             '
@@ -168,7 +137,6 @@ jobs:
             .ci/build-manifests/*.json
           include-hidden-files: true
           retention-days: 14
-
 
 
 
