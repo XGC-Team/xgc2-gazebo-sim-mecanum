@@ -33,6 +33,7 @@
          command="$(find xacro)/xacro $(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=$(arg ns) drive_model:=$(arg drive_model) plugin_filename:=$(arg plugin_filename) mesh_prefix:=$(arg mesh_prefix)"/>
   <node pkg="gazebo_ros" type="spawn_model"
         name="spawn_$(arg model_name)" output="screen"
+        launch-prefix="flock -x /tmp/xgc2-gazebo-spawn.lock"
         args="-sdf -param /$(arg ns)/gazebo_model_sdf
               -model $(arg model_name)
               -x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg yaw)"/>
