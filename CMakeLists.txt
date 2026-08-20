@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   roscpp
   sensor_msgs
+  std_msgs
   tf2
   tf2_ros
 )
@@ -12,7 +13,7 @@ find_package(gazebo REQUIRED)
 
 catkin_package(
   LIBRARIES gazebo_sim_mecanum_contract
-  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs tf2 tf2_ros
+  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs tf2 tf2_ros
 )
 
 include_directories(

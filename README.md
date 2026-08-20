@@ -23,7 +23,8 @@ With the default namespace `ugv1`:
 | `/ugv1/cmd_vel` | `geometry_msgs/Twist` | input | latest body x forward, body y left, +z CCW |
 | `/ugv1/pose` | `geometry_msgs/PoseStamped` | 100 Hz | ground-truth pose in `map` |
 | `/ugv1/twist` | `geometry_msgs/TwistStamped` | 100 Hz | world-frame velocity in `map` |
-| `/ugv1/imu` | `sensor_msgs/Imu` | 100 Hz | orientation and angular rate |
+| `/ugv1/imu` | `sensor_msgs/Imu` | 20 Hz | orientation and angular rate. Matches the Wheeltec MCU `/imu` rate. |
+| `/ugv1/PowerVoltage` | `std_msgs/Float32` | 1.67 Hz | fixed chassis voltage in volts; default 12.348 V (88% of Core `mecanum_ugv.3s_lipo` 10.5–12.6 V). Matches the Wheeltec MCU topic. |
 | `/ugv1/joint_states` | `sensor_msgs/JointState` | 20 Hz | renderer-only wheel angles reconstructed from body motion |
 
 Internal physical wheel rates, effort, slip, and controller state are not

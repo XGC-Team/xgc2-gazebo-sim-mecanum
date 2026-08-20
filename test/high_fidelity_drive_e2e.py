@@ -10,6 +10,7 @@ from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import DeleteModel, GetJointProperties, SetModelState, SpawnModel
 from geometry_msgs.msg import PoseStamped, Twist, TwistStamped
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
 
 
 class HighFidelityDriveContractTest(unittest.TestCase):
@@ -20,9 +21,11 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         cls.pose = None
         cls.twists = []
         cls.joint_state = None
+        cls.voltage = None
         rospy.Subscriber("/ugv1/pose", PoseStamped, cls._pose_callback, queue_size=1)
         rospy.Subscriber("/ugv1/twist", TwistStamped, cls._twist_callback, queue_size=500)
         rospy.Subscriber("/ugv1/joint_states", JointState, cls._joint_callback, queue_size=1)
+        rospy.Subscriber("/ugv1/PowerVoltage", Float32, cls._voltage_callback, queue_size=10)
         cls.command_pub = rospy.Publisher("/ugv1/cmd_vel", Twist, queue_size=1)
         for service in (
             "/gazebo/get_joint_properties",
@@ -39,7 +42,12 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         deadline = time.monotonic() + 20.0
         while time.monotonic() < deadline and not rospy.is_shutdown():
             with cls.lock:
-                ready = cls.pose is not None and bool(cls.twists) and cls.joint_state is not None
+                ready = (
+                    cls.pose is not None
+                    and bool(cls.twists)
+                    and cls.joint_state is not None
+                    and cls.voltage is not None
+                )
             if ready and cls.command_pub.get_num_connections() > 0:
                 return
             rospy.sleep(0.02)
@@ -60,6 +68,11 @@ class HighFidelityDriveContractTest(unittest.TestCase):
     def _joint_callback(cls, message):
         with cls.lock:
             cls.joint_state = message
+
+    @classmethod
+    def _voltage_callback(cls, message):
+        with cls.lock:
+            cls.voltage = message
 
     def publish_command(self, x, y, yaw_rate, duration):
         message = Twist()
@@ -113,6 +126,11 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         self.assertFalse(joint_state.effort)
         published_topics = dict(rospy.get_published_topics())
         self.assertFalse(any(topic.startswith("/ugv1/wheel_") for topic in published_topics))
+        self.assertEqual(published_topics.get("/ugv1/PowerVoltage"), "std_msgs/Float32")
+        with self.lock:
+            voltage = self.voltage
+        self.assertIsNotNone(voltage)
+        self.assertAlmostEqual(voltage.data, 12.348, places=3)
 
         # The last command is held, matching the original SSS outer contract.
         rospy.sleep(0.4)

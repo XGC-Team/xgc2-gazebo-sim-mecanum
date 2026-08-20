@@ -9,6 +9,7 @@ import rostest
 from gazebo_msgs.msg import ModelStates
 from geometry_msgs.msg import PoseStamped, Twist, TwistStamped
 from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32
 from tf.transformations import euler_from_quaternion
 
 
@@ -20,17 +21,21 @@ class IdealDriveContractTest(unittest.TestCase):
         cls.poses = []
         cls.twists = []
         cls.imus = []
+        cls.voltages = []
         cls.model_states = None
         cls.pose_sub = rospy.Subscriber("/ugv1/pose", PoseStamped, cls._pose_callback, queue_size=500)
         cls.twist_sub = rospy.Subscriber("/ugv1/twist", TwistStamped, cls._twist_callback, queue_size=500)
         cls.imu_sub = rospy.Subscriber("/ugv1/imu", Imu, cls._imu_callback, queue_size=500)
+        cls.voltage_sub = rospy.Subscriber(
+            "/ugv1/PowerVoltage", Float32, cls._voltage_callback, queue_size=50
+        )
         cls.model_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, cls._model_callback, queue_size=1)
         cls.command_pub = rospy.Publisher("/ugv1/cmd_vel", Twist, queue_size=10)
 
         deadline = time.monotonic() + 20.0
         while not rospy.is_shutdown() and time.monotonic() < deadline:
             with cls.lock:
-                ready = bool(cls.poses and cls.twists and cls.imus and cls.model_states)
+                ready = bool(cls.poses and cls.twists and cls.imus and cls.voltages and cls.model_states)
             if ready and cls.command_pub.get_num_connections() > 0:
                 return
             rospy.sleep(0.02)
@@ -53,6 +58,12 @@ class IdealDriveContractTest(unittest.TestCase):
         with cls.lock:
             cls.imus.append(message)
             del cls.imus[:-1000]
+
+    @classmethod
+    def _voltage_callback(cls, message):
+        with cls.lock:
+            cls.voltages.append((rospy.Time.now(), message))
+            del cls.voltages[:-200]
 
     @classmethod
     def _model_callback(cls, message):
@@ -93,16 +104,23 @@ class IdealDriveContractTest(unittest.TestCase):
             self.poses.clear()
             self.twists.clear()
             self.imus.clear()
+            self.voltages.clear()
         deadline = time.monotonic() + 8.0
         while time.monotonic() < deadline:
             with self.lock:
-                if len(self.poses) >= 50 and len(self.twists) >= 50 and len(self.imus) >= 50:
+                if (
+                    len(self.poses) >= 50
+                    and len(self.twists) >= 50
+                    and len(self.imus) >= 20
+                    and len(self.voltages) >= 8
+                ):
                     break
             rospy.sleep(0.02)
         with self.lock:
             poses = list(self.poses)
             twists = list(self.twists)
             imus = list(self.imus)
+            voltages = list(self.voltages)
             model_states = self.model_states
 
         self.assertGreaterEqual(len(poses), 50)
@@ -113,9 +131,22 @@ class IdealDriveContractTest(unittest.TestCase):
         rate = (len(poses) - 1) / elapsed
         self.assertGreater(rate, 90.0)
         self.assertLess(rate, 110.0)
+        self.assertGreaterEqual(len(imus), 20)
+        imu_elapsed = (imus[-1].header.stamp - imus[0].header.stamp).to_sec()
+        imu_rate = (len(imus) - 1) / imu_elapsed
+        self.assertGreater(imu_rate, 18.0)
+        self.assertLess(imu_rate, 22.0)
         self.assertIn("ugv1", model_states.name)
         published_topics = dict(rospy.get_published_topics())
         self.assertNotIn("/ugv1/odom", published_topics)
+        self.assertEqual(published_topics.get("/ugv1/PowerVoltage"), "std_msgs/Float32")
+        self.assertGreaterEqual(len(voltages), 8)
+        for _, message in voltages:
+            self.assertAlmostEqual(message.data, 12.348, places=3)
+        voltage_elapsed = (voltages[-1][0] - voltages[0][0]).to_sec()
+        voltage_rate = (len(voltages) - 1) / voltage_elapsed
+        self.assertGreater(voltage_rate, 1.2)
+        self.assertLess(voltage_rate, 2.2)
 
     def test_02_body_xy_response_and_command_hold(self):
         start = self.latest_pose().pose.position

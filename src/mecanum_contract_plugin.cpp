@@ -22,6 +22,7 @@
 #include <ros/subscribe_options.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/JointState.h>
+#include <std_msgs/Float32.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
@@ -35,6 +36,12 @@ constexpr double kSssMaxFrontVelocity = 1.5;
 constexpr double kSssMaxLeftVelocity = 1.5;
 constexpr double kSssMaxYawVelocity = kPi / 2.0;
 constexpr std::size_t kWheelCount = 4;
+// Wheeltec MCU publishes /imu at 20 Hz and std_msgs/Float32 volts on
+// PowerVoltage every 11 chassis frames (~1.67 Hz). Core mecanum_ugv.3s_lipo
+// is linear 10.5–12.6 V.
+constexpr double kDefaultImuRate = 20.0;
+constexpr double kDefaultBatteryVoltage = 12.348;  // 88% SOC
+constexpr double kDefaultPowerVoltageRate = 5.0 / 3.0;
 
 template <typename T>
 T SdfValue(const sdf::ElementPtr& sdf, const std::string& name, const T& fallback) {
@@ -103,9 +110,15 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     const std::string imu_topic = SdfValue<std::string>(sdf, "imuTopic", "imu");
     const std::string joint_states_topic =
         SdfValue<std::string>(sdf, "jointStatesTopic", "joint_states");
+    const std::string power_voltage_topic =
+        SdfValue<std::string>(sdf, "powerVoltageTopic", "PowerVoltage");
 
     state_publish_rate_ = SdfValue<double>(sdf, "statePublishRate", 100.0);
     visual_publish_rate_ = SdfValue<double>(sdf, "visualPublishRate", 20.0);
+    imu_publish_rate_ = SdfValue<double>(sdf, "imuPublishRate", kDefaultImuRate);
+    power_voltage_publish_rate_ =
+        SdfValue<double>(sdf, "powerVoltagePublishRate", kDefaultPowerVoltageRate);
+    battery_voltage_ = SdfValue<double>(sdf, "batteryVoltage", kDefaultBatteryVoltage);
     max_front_velocity_ = SdfValue<double>(sdf, "maxFrontVelocity", kSssMaxFrontVelocity);
     max_left_velocity_ = SdfValue<double>(sdf, "maxLeftVelocity", kSssMaxLeftVelocity);
     max_yaw_velocity_ = SdfValue<double>(sdf, "maxYawVelocity", kSssMaxYawVelocity);
@@ -166,9 +179,18 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     ros_node_->param("linear_vel_scale", linear_scale_, linear_scale_);
     ros_node_->param("angular_vel_scale", angular_scale_, angular_scale_);
     ros_node_->param("use_imu_orientation", use_imu_orientation_, use_imu_orientation_);
+    ros_node_->param("imu_publish_rate", imu_publish_rate_, imu_publish_rate_);
+    ros_node_->param("battery_voltage", battery_voltage_, battery_voltage_);
+    ros_node_->param("power_voltage_publish_rate", power_voltage_publish_rate_,
+                     power_voltage_publish_rate_);
 
     state_publish_rate_ = std::max(1.0, state_publish_rate_);
     visual_publish_rate_ = std::max(1.0, visual_publish_rate_);
+    imu_publish_rate_ = std::max(1.0, imu_publish_rate_);
+    power_voltage_publish_rate_ = std::max(0.1, power_voltage_publish_rate_);
+    if (!std::isfinite(battery_voltage_)) {
+      battery_voltage_ = kDefaultBatteryVoltage;
+    }
     max_front_velocity_ = std::abs(max_front_velocity_);
     max_left_velocity_ = std::abs(max_left_velocity_);
     max_yaw_velocity_ = std::abs(max_yaw_velocity_);
@@ -177,6 +199,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     twist_publisher_ = ros_node_->advertise<geometry_msgs::TwistStamped>(twist_topic, 10, false);
     imu_publisher_ = ros_node_->advertise<sensor_msgs::Imu>(imu_topic, 10, false);
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
+    power_voltage_publisher_ =
+        ros_node_->advertise<std_msgs::Float32>(power_voltage_topic, 10, false);
     ros::SubscribeOptions command_options = ros::SubscribeOptions::create<geometry_msgs::Twist>(
         command_topic, 1000,
         boost::bind(&MecanumContractPlugin::CommandCallback, this, boost::placeholders::_1), ros::VoidPtr(),
@@ -209,6 +233,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   void Reset() override {
     next_state_publish_time_ = 0.0;
     next_visual_publish_time_ = 0.0;
+    next_imu_publish_time_ = 0.0;
+    next_power_voltage_publish_time_ = 0.0;
     last_visual_update_time_ = 0.0;
     last_update_time_ = 0.0;
     wheel_positions_.assign(4, 0.0);
@@ -236,6 +262,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     command_queue_.clear();
 
     joint_states_publisher_.shutdown();
+    power_voltage_publisher_.shutdown();
     imu_publisher_.shutdown();
     twist_publisher_.shutdown();
     pose_publisher_.shutdown();
@@ -281,6 +308,14 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (next_visual_publish_time_ == 0.0 || now + 1.0e-9 >= next_visual_publish_time_) {
       PublishVisualizationState(now);
       AdvanceDeadline(now, 1.0 / visual_publish_rate_, &next_visual_publish_time_);
+    }
+    if (next_imu_publish_time_ == 0.0 || now + 1.0e-9 >= next_imu_publish_time_) {
+      PublishImu(now);
+      AdvanceDeadline(now, 1.0 / imu_publish_rate_, &next_imu_publish_time_);
+    }
+    if (next_power_voltage_publish_time_ == 0.0 || now + 1.0e-9 >= next_power_voltage_publish_time_) {
+      PublishPowerVoltage();
+      AdvanceDeadline(now, 1.0 / power_voltage_publish_rate_, &next_power_voltage_publish_time_);
     }
   }
 
@@ -395,9 +430,16 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     twist_message.twist.angular.y = angular_velocity.Y();
     twist_message.twist.angular.z = angular_velocity.Z();
     twist_publisher_.publish(twist_message);
+  }
+
+  void PublishImu(double sim_time) {
+    const ignition::math::Pose3d pose = model_->WorldPose();
+    const ignition::math::Vector3d angular_velocity = model_->WorldAngularVel();
+    ros::Time stamp;
+    stamp.fromSec(sim_time);
 
     tf2::Quaternion imu_quaternion;
-    imu_quaternion.setRPY(0.0, 0.0, pose_yaw - imu_yaw_base_);
+    imu_quaternion.setRPY(0.0, 0.0, pose.Rot().Yaw() - imu_yaw_base_);
     sensor_msgs::Imu imu_message;
     imu_message.header.stamp = stamp;
     imu_message.header.frame_id = imu_frame_;
@@ -409,6 +451,12 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     imu_message.angular_velocity.y = angular_velocity.Y();
     imu_message.angular_velocity.z = angular_velocity.Z();
     imu_publisher_.publish(imu_message);
+  }
+
+  void PublishPowerVoltage() {
+    std_msgs::Float32 message;
+    message.data = static_cast<float>(battery_voltage_);
+    power_voltage_publisher_.publish(message);
   }
 
   void PublishVisualizationState(double sim_time) {
@@ -477,6 +525,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   ros::Publisher twist_publisher_;
   ros::Publisher imu_publisher_;
   ros::Publisher joint_states_publisher_;
+  ros::Publisher power_voltage_publisher_;
   tf2_ros::TransformBroadcaster tf_broadcaster_;
   std::mutex command_mutex_;
   double front_velocity_command_{0.0};
@@ -485,6 +534,9 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
 
   double state_publish_rate_{100.0};
   double visual_publish_rate_{20.0};
+  double imu_publish_rate_{kDefaultImuRate};
+  double power_voltage_publish_rate_{kDefaultPowerVoltageRate};
+  double battery_voltage_{kDefaultBatteryVoltage};
   double max_front_velocity_{kSssMaxFrontVelocity};
   double max_left_velocity_{kSssMaxLeftVelocity};
   double max_yaw_velocity_{kSssMaxYawVelocity};
@@ -510,6 +562,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   std::string tf_child_frame_;
   double next_state_publish_time_{0.0};
   double next_visual_publish_time_{0.0};
+  double next_imu_publish_time_{0.0};
+  double next_power_voltage_publish_time_{0.0};
   double last_visual_update_time_{0.0};
   double last_update_time_{0.0};
   std::vector<double> wheel_positions_{0.0, 0.0, 0.0, 0.0};

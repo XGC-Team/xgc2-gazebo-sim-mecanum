@@ -125,7 +125,11 @@
       <driveModel>$(arg drive_model)</driveModel>
       <commandTopic>cmd_vel</commandTopic><poseTopic>pose</poseTopic><twistTopic>twist</twistTopic>
       <imuTopic>imu</imuTopic><jointStatesTopic>joint_states</jointStatesTopic>
+      <powerVoltageTopic>PowerVoltage</powerVoltageTopic>
+      <powerVoltagePublishRate>1.666666666666667</powerVoltagePublishRate>
+      <batteryVoltage>12.348</batteryVoltage>
       <statePublishRate>100</statePublishRate><visualPublishRate>20</visualPublishRate>
+      <imuPublishRate>20</imuPublishRate>
       <maxFrontVelocity>1.5</maxFrontVelocity><maxLeftVelocity>1.5</maxLeftVelocity>
       <maxYawVelocity>1.570796326794897</maxYawVelocity>
       <linearScale>1</linearScale><angularScale>1</angularScale>

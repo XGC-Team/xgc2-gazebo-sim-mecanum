@@ -18,6 +18,9 @@
   <arg name="use_imu_orientation" default="false"/>
   <arg name="state_publish_rate" default="100.0"/>
   <arg name="visualize_max_freq" default="20.0"/>
+  <arg name="imu_publish_rate" default="20.0"/>
+  <arg name="battery_voltage" default="12.348"/>
+  <arg name="power_voltage_publish_rate" default="1.666666666666667"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world_name)"/>
@@ -44,5 +47,8 @@
     <arg name="use_imu_orientation" value="$(arg use_imu_orientation)"/>
     <arg name="state_publish_rate" value="$(arg state_publish_rate)"/>
     <arg name="visualize_max_freq" value="$(arg visualize_max_freq)"/>
+    <arg name="imu_publish_rate" value="$(arg imu_publish_rate)"/>
+    <arg name="battery_voltage" value="$(arg battery_voltage)"/>
+    <arg name="power_voltage_publish_rate" value="$(arg power_voltage_publish_rate)"/>
   </include>
 </launch>

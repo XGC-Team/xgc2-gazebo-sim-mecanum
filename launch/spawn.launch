@@ -15,6 +15,9 @@
   <arg name="use_imu_orientation" default="false"/>
   <arg name="state_publish_rate" default="100.0"/>
   <arg name="visualize_max_freq" default="20.0"/>
+  <arg name="imu_publish_rate" default="20.0"/>
+  <arg name="battery_voltage" default="12.348"/>
+  <arg name="power_voltage_publish_rate" default="1.666666666666667"/>
   <arg name="plugin_filename" default="libgazebo_sim_mecanum_contract.so"/>
   <arg name="mesh_prefix" default="model://mecanum_description/meshes"/>
 
@@ -27,6 +30,9 @@
     <param name="use_imu_orientation" value="$(arg use_imu_orientation)"/>
     <param name="state_publish_rate" value="$(arg state_publish_rate)"/>
     <param name="visualize_max_freq" value="$(arg visualize_max_freq)"/>
+    <param name="imu_publish_rate" type="double" value="$(arg imu_publish_rate)"/>
+    <param name="battery_voltage" type="double" value="$(arg battery_voltage)"/>
+    <param name="power_voltage_publish_rate" type="double" value="$(arg power_voltage_publish_rate)"/>
   </group>
 
   <param name="/$(arg ns)/gazebo_model_sdf"
