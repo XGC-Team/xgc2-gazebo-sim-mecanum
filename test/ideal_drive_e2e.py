@@ -23,8 +23,12 @@ class IdealDriveContractTest(unittest.TestCase):
         cls.imus = []
         cls.voltages = []
         cls.model_states = None
-        cls.pose_sub = rospy.Subscriber("/ugv1/pose", PoseStamped, cls._pose_callback, queue_size=500)
-        cls.twist_sub = rospy.Subscriber("/ugv1/twist", TwistStamped, cls._twist_callback, queue_size=500)
+        cls.pose_sub = rospy.Subscriber(
+            "/ugv1/simulation/ground_truth/pose", PoseStamped, cls._pose_callback, queue_size=500
+        )
+        cls.twist_sub = rospy.Subscriber(
+            "/ugv1/simulation/ground_truth/twist", TwistStamped, cls._twist_callback, queue_size=500
+        )
         cls.imu_sub = rospy.Subscriber("/ugv1/imu", Imu, cls._imu_callback, queue_size=500)
         cls.voltage_sub = rospy.Subscriber(
             "/ugv1/PowerVoltage", Float32, cls._voltage_callback, queue_size=50
@@ -139,6 +143,12 @@ class IdealDriveContractTest(unittest.TestCase):
         self.assertIn("ugv1", model_states.name)
         published_topics = dict(rospy.get_published_topics())
         self.assertNotIn("/ugv1/odom", published_topics)
+        self.assertNotIn("/ugv1/pose", published_topics)
+        self.assertNotIn("/ugv1/twist", published_topics)
+        self.assertNotIn("/ugv1/diagnostic/pose", published_topics)
+        self.assertNotIn("/ugv1/diagnostic/twist", published_topics)
+        self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/pose"), "geometry_msgs/PoseStamped")
+        self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/twist"), "geometry_msgs/TwistStamped")
         self.assertEqual(published_topics.get("/ugv1/PowerVoltage"), "std_msgs/Float32")
         self.assertGreaterEqual(len(voltages), 8)
         for _, message in voltages:

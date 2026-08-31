@@ -21,8 +21,8 @@ With the default namespace `ugv1`:
 | Topic | Type | Rate | Meaning |
 | --- | --- | --- | --- |
 | `/ugv1/cmd_vel` | `geometry_msgs/Twist` | input | latest body x forward, body y left, +z CCW |
-| `/ugv1/pose` | `geometry_msgs/PoseStamped` | 100 Hz | ground-truth pose in `map` |
-| `/ugv1/twist` | `geometry_msgs/TwistStamped` | 100 Hz | world-frame velocity in `map` |
+| `/ugv1/simulation/ground_truth/pose` | `geometry_msgs/PoseStamped` | 100 Hz | simulation ground-truth pose in `map`; not the Experiment canonical pose |
+| `/ugv1/simulation/ground_truth/twist` | `geometry_msgs/TwistStamped` | 100 Hz | simulation ground-truth world velocity in `map`; not the Experiment canonical twist |
 | `/ugv1/imu` | `sensor_msgs/Imu` | 20 Hz | orientation and angular rate. Matches the Wheeltec MCU `/imu` rate. |
 | `/ugv1/PowerVoltage` | `std_msgs/Float32` | 1.67 Hz | fixed chassis voltage in volts; default 12.348 V (88% of Core `mecanum_ugv.3s_lipo` 10.5–12.6 V). Matches the Wheeltec MCU topic. |
 | `/ugv1/joint_states` | `sensor_msgs/JointState` | 20 Hz | renderer-only wheel angles reconstructed from body motion |
@@ -34,7 +34,9 @@ robots.
 
 Defaults preserve the original SSS outer contract: x/y limits are 1.5 m/s,
 yaw limit is 90 degrees/s, scale factors are 1.0, and there is no command
-watchdog. No odometry message is published. `map -> ugv1/base_footprint` is
+watchdog. No odometry message is published. The plugin does not advertise
+canonical `/<namespace>/pose` or `/<namespace>/twist`; those topics are owned
+by `experiment-localization-projection`. `map -> ugv1/base_footprint` is
 broadcast at 20 Hz.
 
 ## Drive models

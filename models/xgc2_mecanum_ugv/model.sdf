@@ -473,8 +473,8 @@
       <robotNamespace>ugv1</robotNamespace>
       <driveModel>high_fidelity</driveModel>
       <commandTopic>cmd_vel</commandTopic>
-      <poseTopic>pose</poseTopic>
-      <twistTopic>twist</twistTopic>
+      <poseTopic>simulation/ground_truth/pose</poseTopic>
+      <twistTopic>simulation/ground_truth/twist</twistTopic>
       <imuTopic>imu</imuTopic>
       <jointStatesTopic>joint_states</jointStatesTopic>
       <powerVoltageTopic>PowerVoltage</powerVoltageTopic>

@@ -22,8 +22,8 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         cls.twists = []
         cls.joint_state = None
         cls.voltage = None
-        rospy.Subscriber("/ugv1/pose", PoseStamped, cls._pose_callback, queue_size=1)
-        rospy.Subscriber("/ugv1/twist", TwistStamped, cls._twist_callback, queue_size=500)
+        rospy.Subscriber("/ugv1/simulation/ground_truth/pose", PoseStamped, cls._pose_callback, queue_size=1)
+        rospy.Subscriber("/ugv1/simulation/ground_truth/twist", TwistStamped, cls._twist_callback, queue_size=500)
         rospy.Subscriber("/ugv1/joint_states", JointState, cls._joint_callback, queue_size=1)
         rospy.Subscriber("/ugv1/PowerVoltage", Float32, cls._voltage_callback, queue_size=10)
         cls.command_pub = rospy.Publisher("/ugv1/cmd_vel", Twist, queue_size=1)
@@ -126,6 +126,12 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         self.assertFalse(joint_state.effort)
         published_topics = dict(rospy.get_published_topics())
         self.assertFalse(any(topic.startswith("/ugv1/wheel_") for topic in published_topics))
+        self.assertNotIn("/ugv1/pose", published_topics)
+        self.assertNotIn("/ugv1/twist", published_topics)
+        self.assertNotIn("/ugv1/diagnostic/pose", published_topics)
+        self.assertNotIn("/ugv1/diagnostic/twist", published_topics)
+        self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/pose"), "geometry_msgs/PoseStamped")
+        self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/twist"), "geometry_msgs/TwistStamped")
         self.assertEqual(published_topics.get("/ugv1/PowerVoltage"), "std_msgs/Float32")
         with self.lock:
             voltage = self.voltage

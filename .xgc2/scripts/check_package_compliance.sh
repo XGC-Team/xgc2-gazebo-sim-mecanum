@@ -43,8 +43,8 @@ for path in "${required[@]}"; do
 done
 
 grep -q '^id: xgc2-gazebo-sim-mecanum$' .xgc2/product.yml
-grep -q '^version: 0.1.0-12$' .xgc2/product.yml
-grep -q '^    focal: 0.1.0-12$' .xgc2/product.yml
+grep -q '^version: 0.1.0-13$' .xgc2/product.yml
+grep -q '^    focal: 0.1.0-13$' .xgc2/product.yml
 grep -q '<name>gazebo_sim_mecanum</name>' package.xml
 grep -q 'PACKAGE="ros-noetic-xgc2-gazebo-sim-mecanum"' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-rostest' .xgc2/scripts/package_debs.sh
@@ -70,6 +70,8 @@ expanded_sdf="$(mktemp)"
 /opt/ros/noetic/bin/xacro models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=ugv_contract >"${expanded_sdf}"
 grep -q '<robotNamespace>ugv_contract</robotNamespace>' "${expanded_sdf}"
 grep -q '<driveModel>high_fidelity</driveModel>' "${expanded_sdf}"
+grep -q '<poseTopic>simulation/ground_truth/pose</poseTopic>' "${expanded_sdf}"
+grep -q '<twistTopic>simulation/ground_truth/twist</twistTopic>' "${expanded_sdf}"
 grep -q '<gravity>True</gravity>' "${expanded_sdf}"
 grep -q '<joint name="upper_left_wheel_joint"' "${expanded_sdf}"
 GAZEBO_MODEL_PATH="/opt/ros/noetic/share:${REPO_ROOT}/models:${GAZEBO_MODEL_PATH:-}" gz sdf -k "${expanded_sdf}"
@@ -98,6 +100,53 @@ GAZEBO_MODEL_PATH="/opt/ros/noetic/share:${REPO_ROOT}/models:${GAZEBO_MODEL_PATH
 rm -f "${expanded_ideal_sdf}"
 
 grep -q 'filename="libgazebo_sim_mecanum_contract.so"' models/xgc2_mecanum_ugv/model.sdf
+grep -q '<poseTopic>simulation/ground_truth/pose</poseTopic>' models/xgc2_mecanum_ugv/model.sdf
+grep -q '<twistTopic>simulation/ground_truth/twist</twistTopic>' models/xgc2_mecanum_ugv/model.sdf
+grep -q '<poseTopic>simulation/ground_truth/pose</poseTopic>' models/xgc2_mecanum_ugv/model.sdf.xacro
+grep -q '<twistTopic>simulation/ground_truth/twist</twistTopic>' models/xgc2_mecanum_ugv/model.sdf.xacro
+default_expanded_sdf="$(mktemp)"
+/opt/ros/noetic/bin/xacro models/xgc2_mecanum_ugv/model.sdf.xacro >"${default_expanded_sdf}"
+for tag in poseTopic twistTopic; do
+  committed="$(grep -o "<${tag}>[^<]*</${tag}>" models/xgc2_mecanum_ugv/model.sdf | sort -u)"
+  expanded="$(grep -o "<${tag}>[^<]*</${tag}>" "${default_expanded_sdf}" | sort -u)"
+  xacro_src="$(grep -o "<${tag}>[^<]*</${tag}>" models/xgc2_mecanum_ugv/model.sdf.xacro | sort -u)"
+  if [[ "${committed}" != "${expanded}" || "${committed}" != "${xacro_src}" ]]; then
+    echo "Installed model.sdf ${tag} drifted from xacro (${committed} vs ${expanded} vs ${xacro_src})" >&2
+    rm -f "${default_expanded_sdf}"
+    exit 1
+  fi
+done
+rm -f "${default_expanded_sdf}"
+if grep -Eq '<poseTopic>pose</poseTopic>|<twistTopic>twist</twistTopic>' \
+  models/xgc2_mecanum_ugv/model.sdf models/xgc2_mecanum_ugv/model.sdf.xacro; then
+  echo "Mecanum SDF must not pin canonical pose/twist topics" >&2
+  exit 1
+fi
+grep -q 'kSimulationGroundTruthPoseTopic = "simulation/ground_truth/pose"' src/mecanum_contract_plugin.cpp
+grep -q 'kSimulationGroundTruthTwistTopic = "simulation/ground_truth/twist"' src/mecanum_contract_plugin.cpp
+grep -q 'SdfDeclaresExactRelativeTopic' src/mecanum_contract_plugin.cpp
+grep -q 'advertise<geometry_msgs::PoseStamped>(kSimulationGroundTruthPoseTopic' src/mecanum_contract_plugin.cpp
+if grep -Eq 'SdfValue<.*>\(sdf, "poseTopic"|SdfValue<.*>\(sdf, "twistTopic"' src/mecanum_contract_plugin.cpp; then
+  echo "Plugin must not take configurable poseTopic/twistTopic from SDF" >&2
+  exit 1
+fi
+if grep -q 'TrimSlashes(topic)' src/mecanum_contract_plugin.cpp; then
+  echo "Plugin ground-truth topic guard must compare the exact relative name" >&2
+  exit 1
+fi
+if grep -Eq 'value\.compare\(value\.size\(\)|IsDiagnosticStateTopic|IsSimulationGroundTruthTopic' src/mecanum_contract_plugin.cpp; then
+  echo "Plugin must not suffix-match ground-truth topics" >&2
+  exit 1
+fi
+if grep -Eq '"poseTopic", "pose"|"twistTopic", "twist"|"diagnostic/pose"|"diagnostic/twist"' src/mecanum_contract_plugin.cpp; then
+  echo "Plugin defaults must not advertise canonical or short diagnostic pose/twist" >&2
+  exit 1
+fi
+grep -q '`/ugv1/simulation/ground_truth/pose`' README.md
+if grep -Eq '`/ugv1/pose`|`/ugv1/twist`|`/ugv1/diagnostic/pose`' README.md; then
+  echo "README must not document canonical /ugv1/pose or /twist as plugin contract" >&2
+  exit 1
+fi
 grep -q 'model_->SetLinearVel' src/mecanum_contract_plugin.cpp
 grep -q 'model_->SetAngularVel' src/mecanum_contract_plugin.cpp
 grep -q 'wheel_joints_\[index\]->SetForce' src/mecanum_contract_plugin.cpp

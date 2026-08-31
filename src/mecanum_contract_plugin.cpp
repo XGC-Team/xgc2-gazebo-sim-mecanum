@@ -42,6 +42,10 @@ constexpr std::size_t kWheelCount = 4;
 constexpr double kDefaultImuRate = 20.0;
 constexpr double kDefaultBatteryVoltage = 12.348;  // 88% SOC
 constexpr double kDefaultPowerVoltageRate = 5.0 / 3.0;
+// These exact relative names stay below the slot NodeHandle. Canonical
+// /<namespace>/pose and /twist belong to experiment-localization-projection.
+constexpr const char* kSimulationGroundTruthPoseTopic = "simulation/ground_truth/pose";
+constexpr const char* kSimulationGroundTruthTwistTopic = "simulation/ground_truth/twist";
 
 template <typename T>
 T SdfValue(const sdf::ElementPtr& sdf, const std::string& name, const T& fallback) {
@@ -63,6 +67,11 @@ std::string TrimSlashes(std::string value) {
     value.pop_back();
   }
   return value;
+}
+
+bool SdfDeclaresExactRelativeTopic(const sdf::ElementPtr& sdf, const char* element,
+                                   const char* expected) {
+  return !sdf || !sdf->HasElement(element) || sdf->Get<std::string>(element) == expected;
 }
 
 }  // namespace
@@ -105,8 +114,14 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     ros_node_.reset(new ros::NodeHandle(robot_namespace));
 
     const std::string command_topic = SdfValue<std::string>(sdf, "commandTopic", "cmd_vel");
-    const std::string pose_topic = SdfValue<std::string>(sdf, "poseTopic", "pose");
-    const std::string twist_topic = SdfValue<std::string>(sdf, "twistTopic", "twist");
+    if (!SdfDeclaresExactRelativeTopic(sdf, "poseTopic", kSimulationGroundTruthPoseTopic) ||
+        !SdfDeclaresExactRelativeTopic(sdf, "twistTopic", kSimulationGroundTruthTwistTopic)) {
+      gzerr << "[gazebo_sim_mecanum] poseTopic/twistTopic are not configurable; they must equal "
+               "the exact relative strings simulation/ground_truth/pose and "
+               "simulation/ground_truth/twist. Canonical "
+               "/<namespace>/pose and /twist are owned by experiment-localization-projection\n";
+      return;
+    }
     const std::string imu_topic = SdfValue<std::string>(sdf, "imuTopic", "imu");
     const std::string joint_states_topic =
         SdfValue<std::string>(sdf, "jointStatesTopic", "joint_states");
@@ -195,8 +210,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     max_left_velocity_ = std::abs(max_left_velocity_);
     max_yaw_velocity_ = std::abs(max_yaw_velocity_);
 
-    pose_publisher_ = ros_node_->advertise<geometry_msgs::PoseStamped>(pose_topic, 10, false);
-    twist_publisher_ = ros_node_->advertise<geometry_msgs::TwistStamped>(twist_topic, 10, false);
+    pose_publisher_ = ros_node_->advertise<geometry_msgs::PoseStamped>(kSimulationGroundTruthPoseTopic, 10, false);
+    twist_publisher_ = ros_node_->advertise<geometry_msgs::TwistStamped>(kSimulationGroundTruthTwistTopic, 10, false);
     imu_publisher_ = ros_node_->advertise<sensor_msgs::Imu>(imu_topic, 10, false);
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
     power_voltage_publisher_ =
@@ -227,6 +242,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
                                                     << ros_node_->getNamespace() << "' drive_model='"
                                                     << (high_fidelity_ ? "high_fidelity" : "ideal")
+                                                    << "' ground truth pose='" << kSimulationGroundTruthPoseTopic
+                                                    << "' twist='" << kSimulationGroundTruthTwistTopic
                                                     << "' uses Gazebo-owned integration");
   }
 

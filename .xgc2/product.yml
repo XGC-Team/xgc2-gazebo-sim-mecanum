@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-mecanum
 name: XGC2 Gazebo Sim Mecanum
-version: 0.1.0-12
+version: 0.1.0-13
 kind: ros1-apt
 summary: Selectable high-fidelity and ideal Mecanum UGV dynamics for Gazebo Classic
   11.
@@ -58,9 +58,11 @@ usage:
 
     collision-free response. Gazebo owns all pose integration in both modes.
 
-    The product publishes no odometry; the optional VRPN bridge consumes Gazebo
+    The product publishes no odometry and no canonical /namespace/pose or
 
-    model poses directly.
+    /namespace/twist; plugin truth is diagnostic/pose and diagnostic/twist.
+
+    The optional VRPN bridge consumes Gazebo model poses directly.
 
     '
 ownership:
@@ -81,4 +83,4 @@ release:
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
   apt_versions:
-    focal: 0.1.0-12
+    focal: 0.1.0-13

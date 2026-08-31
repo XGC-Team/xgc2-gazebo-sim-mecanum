@@ -123,7 +123,7 @@
     <plugin name="mecanum_contract" filename="$(arg plugin_filename)">
       <robotNamespace>$(arg robot_namespace)</robotNamespace>
       <driveModel>$(arg drive_model)</driveModel>
-      <commandTopic>cmd_vel</commandTopic><poseTopic>pose</poseTopic><twistTopic>twist</twistTopic>
+      <commandTopic>cmd_vel</commandTopic><poseTopic>simulation/ground_truth/pose</poseTopic><twistTopic>simulation/ground_truth/twist</twistTopic>
       <imuTopic>imu</imuTopic><jointStatesTopic>joint_states</jointStatesTopic>
       <powerVoltageTopic>PowerVoltage</powerVoltageTopic>
       <powerVoltagePublishRate>1.666666666666667</powerVoltagePublishRate>
