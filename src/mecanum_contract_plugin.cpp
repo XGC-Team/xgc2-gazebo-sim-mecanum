@@ -26,6 +26,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
+#include "xgc_chassis_hold/udp.hpp"
+
 namespace gazebo_sim_mecanum {
 namespace {
 
@@ -226,6 +228,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     command_spinner_.reset(new ros::AsyncSpinner(1, &command_queue_));
     command_spinner_->start();
 
+    hold_gate_.reset(new xgc_chassis_hold::Gate(xgc_chassis_hold::lastPath(robot_namespace)));
+    hold_gate_->setZeroThunk(&MecanumContractPlugin::HoldZeroThunk, this);
+    xgc_chassis_hold::Hub::instance().add(hold_gate_.get());
+
     tf_child_frame_ = TrimSlashes(robot_namespace);
     if (tf_child_frame_.empty()) {
       tf_child_frame_ = model_->GetName();
@@ -272,6 +278,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       update_gate->owner = nullptr;
     }
 
+    if (hold_gate_) {
+      xgc_chassis_hold::Hub::instance().remove(hold_gate_.get());
+      hold_gate_.reset();
+    }
     command_queue_.disable();
     command_subscriber_.shutdown();
     if (command_spinner_) {
@@ -295,8 +305,23 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     update_gate_.reset();
   }
 
+  static void HoldZeroThunk(void* self) {
+    static_cast<MecanumContractPlugin*>(self)->HoldZero();
+  }
+
+  void HoldZero() {
+    std::lock_guard<std::mutex> lock(command_mutex_);
+    front_velocity_command_ = 0.0;
+    left_velocity_command_ = 0.0;
+    yaw_velocity_command_ = 0.0;
+  }
+
   void CommandCallback(const geometry_msgs::Twist::ConstPtr& command) {
     if (shutting_down_.load(std::memory_order_acquire)) {
+      return;
+    }
+    if (hold_gate_ && hold_gate_->held()) {
+      HoldZero();
       return;
     }
     std::lock_guard<std::mutex> lock(command_mutex_);
@@ -547,6 +572,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   ros::Publisher power_voltage_publisher_;
   tf2_ros::TransformBroadcaster tf_broadcaster_;
   std::mutex command_mutex_;
+  std::unique_ptr<xgc_chassis_hold::Gate> hold_gate_;
   double front_velocity_command_{0.0};
   double left_velocity_command_{0.0};
   double yaw_velocity_command_{0.0};

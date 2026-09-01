@@ -18,6 +18,7 @@ catkin_package(
 
 include_directories(
   include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../include
   ${catkin_INCLUDE_DIRS}
   ${GAZEBO_INCLUDE_DIRS}
 )
@@ -29,9 +30,11 @@ add_library(gazebo_sim_mecanum_contract SHARED
 )
 target_compile_features(gazebo_sim_mecanum_contract PRIVATE cxx_std_14)
 add_dependencies(gazebo_sim_mecanum_contract ${catkin_EXPORTED_TARGETS})
+find_package(Threads REQUIRED)
 target_link_libraries(gazebo_sim_mecanum_contract
   ${catkin_LIBRARIES}
   ${GAZEBO_LIBRARIES}
+  Threads::Threads
 )
 
 install(TARGETS gazebo_sim_mecanum_contract
