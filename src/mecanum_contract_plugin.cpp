@@ -36,12 +36,14 @@ constexpr double kSssMaxFrontVelocity = 1.5;
 constexpr double kSssMaxLeftVelocity = 1.5;
 constexpr double kSssMaxYawVelocity = kPi / 2.0;
 constexpr std::size_t kWheelCount = 4;
-// Wheeltec MCU publishes /imu at 20 Hz and std_msgs/Float32 volts on
-// PowerVoltage every 11 chassis frames (~1.67 Hz). Core mecanum_ugv.3s_lipo
-// is linear 10.5–12.6 V.
+// Wheeltec MCU publishes /imu at 20 Hz. Onboard /PowerVoltage is ~1.67 Hz
+// (every 11 chassis frames); swarm-ros-bridge send max_freq=1 on :3002.
+// Simulation has no bridge. Gazebo publishes the post-bridge contract:
+// std_msgs/Float32 volts at 1 Hz. Core mecanum_ugv.3s_lipo is linear
+// 10.5–12.6 V.
 constexpr double kDefaultImuRate = 20.0;
 constexpr double kDefaultBatteryVoltage = 12.348;  // 88% SOC
-constexpr double kDefaultPowerVoltageRate = 5.0 / 3.0;
+constexpr double kDefaultPowerVoltageRate = 1.0;
 // These exact relative names stay below the slot NodeHandle. Canonical
 // /<namespace>/pose and /twist belong to experiment-localization-projection.
 constexpr const char* kSimulationGroundTruthPoseTopic = "simulation/ground_truth/pose";

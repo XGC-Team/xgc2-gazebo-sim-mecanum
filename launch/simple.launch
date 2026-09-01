@@ -20,7 +20,7 @@
   <arg name="visualize_max_freq" default="20.0"/>
   <arg name="imu_publish_rate" default="20.0"/>
   <arg name="battery_voltage" default="12.348"/>
-  <arg name="power_voltage_publish_rate" default="1.666666666666667"/>
+  <arg name="power_voltage_publish_rate" default="1"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world_name)"/>

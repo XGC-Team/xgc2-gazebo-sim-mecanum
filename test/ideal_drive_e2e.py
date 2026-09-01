@@ -116,7 +116,7 @@ class IdealDriveContractTest(unittest.TestCase):
                     len(self.poses) >= 50
                     and len(self.twists) >= 50
                     and len(self.imus) >= 20
-                    and len(self.voltages) >= 8
+                    and len(self.voltages) >= 5
                 ):
                     break
             rospy.sleep(0.02)
@@ -150,13 +150,13 @@ class IdealDriveContractTest(unittest.TestCase):
         self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/pose"), "geometry_msgs/PoseStamped")
         self.assertEqual(published_topics.get("/ugv1/simulation/ground_truth/twist"), "geometry_msgs/TwistStamped")
         self.assertEqual(published_topics.get("/ugv1/PowerVoltage"), "std_msgs/Float32")
-        self.assertGreaterEqual(len(voltages), 8)
+        self.assertGreaterEqual(len(voltages), 5)
         for _, message in voltages:
             self.assertAlmostEqual(message.data, 12.348, places=3)
         voltage_elapsed = (voltages[-1][0] - voltages[0][0]).to_sec()
         voltage_rate = (len(voltages) - 1) / voltage_elapsed
-        self.assertGreater(voltage_rate, 1.2)
-        self.assertLess(voltage_rate, 2.2)
+        self.assertGreater(voltage_rate, 0.8)
+        self.assertLess(voltage_rate, 1.2)
 
     def test_02_body_xy_response_and_command_hold(self):
         start = self.latest_pose().pose.position

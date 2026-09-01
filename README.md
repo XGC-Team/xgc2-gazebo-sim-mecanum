@@ -23,8 +23,8 @@ With the default namespace `ugv1`:
 | `/ugv1/cmd_vel` | `geometry_msgs/Twist` | input | latest body x forward, body y left, +z CCW |
 | `/ugv1/simulation/ground_truth/pose` | `geometry_msgs/PoseStamped` | 100 Hz | simulation ground-truth pose in `map`; not the Experiment canonical pose |
 | `/ugv1/simulation/ground_truth/twist` | `geometry_msgs/TwistStamped` | 100 Hz | simulation ground-truth world velocity in `map`; not the Experiment canonical twist |
-| `/ugv1/imu` | `sensor_msgs/Imu` | 20 Hz | orientation and angular rate. Matches the Wheeltec MCU `/imu` rate. |
-| `/ugv1/PowerVoltage` | `std_msgs/Float32` | 1.67 Hz | fixed chassis voltage in volts; default 12.348 V (88% of Core `mecanum_ugv.3s_lipo` 10.5–12.6 V). Matches the Wheeltec MCU topic. |
+| `/ugv1/imu` | `sensor_msgs/Imu` | 20 Hz | orientation and angular rate. Matches Wheeltec MCU `/imu` and swarm-ros-bridge send `max_freq=20` (`:3001`). |
+| `/ugv1/PowerVoltage` | `std_msgs/Float32` | 1 Hz | fixed chassis voltage in volts; default 12.348 V (88% of Core `mecanum_ugv.3s_lipo` 10.5–12.6 V). Same name/type as the Wheeltec MCU topic. Rate matches swarm-ros-bridge send `max_freq=1` (`:3002`), not the onboard MCU ~1.67 Hz. Simulation does not run swarm-ros-bridge. |
 | `/ugv1/joint_states` | `sensor_msgs/JointState` | 20 Hz | renderer-only wheel angles reconstructed from body motion |
 
 Internal physical wheel rates, effort, slip, and controller state are not
