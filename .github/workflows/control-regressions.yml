@@ -1,0 +1,26 @@
+name: Mecanum HOLD regressions
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  hold-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check plugin lifecycle and actuator wiring
+        run: python3 -m unittest discover -s test -p test_hold_wiring.py -v
+      - name: Compile and run deterministic Gate tests
+        run: |
+          g++ -std=c++11 -Wall -Wextra -Werror -pthread -Iinclude test/hold_gate_test.cpp -o /tmp/hold_gate_test
+          timeout 30s /tmp/hold_gate_test
+          g++ -std=c++11 -g -fsanitize=address,undefined -fno-omit-frame-pointer -pthread -Iinclude test/hold_gate_test.cpp -o /tmp/hold_gate_san
+          timeout 30s /tmp/hold_gate_san
+      - name: Compile vendored UDP header
+        run: |
+          printf '#include "xgc_chassis_hold/udp.hpp"\nint main() {}\n' > /tmp/udp_header_smoke.cpp
+          g++ -std=c++11 -Wall -Wextra -Werror -pthread -Iinclude -fsyntax-only /tmp/udp_header_smoke.cpp
