@@ -220,6 +220,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
     power_voltage_publisher_ =
         ros_node_->advertise<std_msgs::Float32>(power_voltage_topic, 10, false);
+    hold_gate_.reset(new xgc_chassis_hold::Gate(xgc_chassis_hold::lastPath(robot_namespace)));
+    hold_gate_->setZeroThunk(&MecanumContractPlugin::HoldZeroThunk, this);
+    xgc_chassis_hold::Hub::instance().add(hold_gate_.get());
+
     ros::SubscribeOptions command_options = ros::SubscribeOptions::create<geometry_msgs::Twist>(
         command_topic, 1000,
         boost::bind(&MecanumContractPlugin::CommandCallback, this, boost::placeholders::_1), ros::VoidPtr(),
@@ -227,10 +231,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     command_subscriber_ = ros_node_->subscribe(command_options);
     command_spinner_.reset(new ros::AsyncSpinner(1, &command_queue_));
     command_spinner_->start();
-
-    hold_gate_.reset(new xgc_chassis_hold::Gate(xgc_chassis_hold::lastPath(robot_namespace)));
-    hold_gate_->setZeroThunk(&MecanumContractPlugin::HoldZeroThunk, this);
-    xgc_chassis_hold::Hub::instance().add(hold_gate_.get());
 
     tf_child_frame_ = TrimSlashes(robot_namespace);
     if (tf_child_frame_.empty()) {
@@ -278,10 +278,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       update_gate->owner = nullptr;
     }
 
-    if (hold_gate_) {
-      xgc_chassis_hold::Hub::instance().remove(hold_gate_.get());
-      hold_gate_.reset();
-    }
     command_queue_.disable();
     command_subscriber_.shutdown();
     if (command_spinner_) {
@@ -289,6 +285,13 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       command_spinner_.reset();
     }
     command_queue_.clear();
+
+    // All ROS/Gazebo command producers are drained before releasing the Gate.
+    // Unregister also waits for any in-flight UDP zero callback.
+    if (hold_gate_) {
+      xgc_chassis_hold::Hub::instance().remove(hold_gate_.get());
+      hold_gate_.reset();
+    }
 
     joint_states_publisher_.shutdown();
     power_voltage_publisher_.shutdown();
@@ -320,14 +323,16 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (shutting_down_.load(std::memory_order_acquire)) {
       return;
     }
-    if (hold_gate_ && hold_gate_->held()) {
-      HoldZero();
-      return;
-    }
-    std::lock_guard<std::mutex> lock(command_mutex_);
-    front_velocity_command_ = linear_scale_ * ClampFinite(command->linear.x, max_front_velocity_);
-    left_velocity_command_ = linear_scale_ * ClampFinite(command->linear.y, max_left_velocity_);
-    yaw_velocity_command_ = angular_scale_ * ClampFinite(command->angular.z, max_yaw_velocity_);
+    hold_gate_->withCommand([&](bool held) {
+      if (held) {
+        HoldZero();
+        return;
+      }
+      std::lock_guard<std::mutex> lock(command_mutex_);
+      front_velocity_command_ = linear_scale_ * ClampFinite(command->linear.x, max_front_velocity_);
+      left_velocity_command_ = linear_scale_ * ClampFinite(command->linear.y, max_left_velocity_);
+      yaw_velocity_command_ = angular_scale_ * ClampFinite(command->angular.z, max_yaw_velocity_);
+    });
   }
 
   void OnUpdate(const gazebo::common::UpdateInfo& info) {
@@ -340,11 +345,18 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       dt = now - last_update_time_;
     }
     last_update_time_ = now;
-    if (high_fidelity_) {
-      ApplyWheelDynamics(dt);
-    } else {
-      ApplyPlanarVelocity();
-    }
+    // Serialize the actuator write, not only the earlier command receipt,
+    // against HOLD. Zero wheel targets can still generate braking forces.
+    hold_gate_->withCommand([&](bool held) {
+      if (held) {
+        HoldZero();
+      }
+      if (high_fidelity_) {
+        ApplyWheelDynamics(dt);
+      } else {
+        ApplyPlanarVelocity();
+      }
+    });
     if (next_state_publish_time_ == 0.0 || now + 1.0e-9 >= next_state_publish_time_) {
       PublishState(now);
       AdvanceDeadline(now, 1.0 / state_publish_rate_, &next_state_publish_time_);
