@@ -1,7 +1,7 @@
 """Black-box HOLD framing regression; run only in a disposable test environment.
 
 Compile the production header without ROS or socket mocks. Refuse to start if
-port 19520 is already occupied, and send test traffic exclusively to loopback.
+the robot endpoint is already occupied, and send test traffic exclusively to loopback.
 """
 import itertools
 import os
@@ -14,21 +14,26 @@ import tempfile
 import unittest
 
 
+def port(robot):
+    value = 2166136261
+    for byte in robot.encode():
+        value = ((value ^ byte) * 16777619) & 0xffffffff
+    return 20000 + value % 20000
+
+
 ENDPOINT = r'''
 #include "xgc_chassis_hold/udp.hpp"
 #include <iostream>
-int main() {
-  xgc_chassis_hold::Gate target("ugv1"), barrier("audit_barrier");
+int main(int argc, char** argv) {
+  xgc_chassis_hold::Gate target(argc > 1 ? argv[1] : "ugv1");
   auto& hub = xgc_chassis_hold::Hub::instance();
   hub.add(&target);
-  hub.add(&barrier);
   std::cout << "ready" << std::endl;
   std::string line;
   while (std::getline(std::cin, line) && line != "quit") {
     std::cout << target.held() << std::endl;
   }
   hub.remove(&target);
-  hub.remove(&barrier);
 }
 '''
 
@@ -51,7 +56,7 @@ class UdpFrameTest(unittest.TestCase):
     def setUp(self):
         # Never join an existing production/test listener through SO_REUSEADDR.
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-            probe.bind(("0.0.0.0", 19520))
+            probe.bind(("0.0.0.0", port("ugv1")))
         self.process = subprocess.Popen(
             [str(self.endpoint)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True)
@@ -83,21 +88,22 @@ class UdpFrameTest(unittest.TestCase):
 
     def exchange(self, packet):
         barrier = next(self.sequence)
-        self.client.sendto(packet, ("127.0.0.1", 19520))
+        self.client.sendto(packet, ("127.0.0.1", port("ugv1")))
         self.client.sendto(self.frame(barrier, False, b"audit_barrier"),
-                           ("127.0.0.1", 19520))
+                           ("127.0.0.1", port("ugv1")))
         acknowledgements = []
-        # The same receiver processes the barrier after the test frame. This
+        # An unmatched-ID request to the SAME endpoint is an ordered no-op. This
         # avoids sleep-based assertions that a malformed frame was ignored.
         while True:
             ack, sender = self.client.recvfrom(1024)
-            self.assertEqual(sender, ("127.0.0.1", 19520))
+            self.assertEqual(sender, ("127.0.0.1", port("ugv1")))
             self.assertEqual(len(ack), 12)
             self.assertEqual(ack[:5], struct.pack("<IB", 0x58474348, 1))
             request = struct.unpack_from("<I", ack, 8)[0]
-            self.assertEqual(ack[6], 0)
             if request == barrier:
+                self.assertEqual(ack[6], 1)
                 break
+            self.assertEqual(ack[6], 0)
             acknowledgements.append((request, bool(ack[5])))
         self.process.stdin.write("state\n")
         self.process.stdin.flush()

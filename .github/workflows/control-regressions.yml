@@ -16,6 +16,8 @@ jobs:
         run: python3 -m unittest discover -s test -p test_hold_wiring.py -v
       - name: Reject malformed HOLD datagrams
         run: python3 -m unittest discover -s test -p test_udp_frames.py -v
+      - name: Route HOLD across independent robot processes
+        run: python3 -m unittest discover -s test -p test_udp_routing.py -v
       - name: Compile and run deterministic Gate tests
         run: |
           g++ -std=c++11 -Wall -Wextra -Werror -pthread -Iinclude test/hold_gate_test.cpp -o /tmp/hold_gate_test

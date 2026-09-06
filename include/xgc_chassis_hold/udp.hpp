@@ -10,6 +10,8 @@
 #include <cerrno>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <stdexcept>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -49,71 +51,78 @@ inline std::string lastPath(const std::string &value) {
   return trimmed.substr(slash + 1);
 }
 
+// Simulator endpoints are robot-specific. This mapping is shared with Core's
+// simulation sender; physical chassis retain their separate port 19520 contract.
+// Hash collisions are detected by exclusive bind, never shared or misrouted.
+inline uint16_t simulationPort(const std::string& robot_id) {
+  uint32_t hash = 2166136261u;
+  for (unsigned char ch : robot_id) { hash ^= ch; hash *= 16777619u; }
+  return static_cast<uint16_t>(20000u + hash % 20000u);
+}
+
 class Hub {
  public:
-  static Hub &instance() {
-    static Hub hub;
-    return hub;
-  }
+  static Hub &instance() { static Hub hub; return hub; }
 
   void add(Gate *gate) {
-    if (gate == nullptr) return;
-    start();
+    if (!gate || gate->robotId().empty() || gate->robotId().size() >= kRobotIdBytes)
+      throw std::runtime_error("HOLD requires a nonempty robot ID shorter than 32 bytes");
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (endpoints_.count(gate)) return;
+    std::unique_ptr<Endpoint> endpoint(new Endpoint);
+    endpoint->fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (endpoint->fd < 0) throw std::runtime_error("HOLD socket creation failed");
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(simulationPort(gate->robotId()));
+    if (bind(endpoint->fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+      const std::string message = "HOLD endpoint for " + gate->robotId() + " at port " +
+          std::to_string(simulationPort(gate->robotId())) + " is unavailable: " + std::strerror(errno);
+      close(endpoint->fd);
+      throw std::runtime_error(message);
+    }
+    endpoint->robot = gate->robotId();
     registry_.add(gate);
+    Endpoint* raw = endpoint.get();
+    try { endpoint->thread = std::thread([this, raw] { loop(*raw); }); }
+    catch (...) { registry_.remove(gate); close(endpoint->fd); throw; }
+    endpoints_.emplace(gate, std::move(endpoint));
   }
 
-  void remove(Gate *gate) { registry_.remove(gate); }
+  void remove(Gate *gate) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto found = endpoints_.find(gate);
+    if (found == endpoints_.end()) return;
+    registry_.remove(gate); // drains the owner callback before destruction
+    stop(*found->second);
+    endpoints_.erase(found);
+  }
 
  private:
+  struct Endpoint {
+    int fd = -1;
+    std::string robot;
+    std::atomic<bool> stopping{false};
+    std::thread thread;
+  };
   Hub() {}
-  ~Hub() {
-    stop_.store(true, std::memory_order_release);
-    if (fd_ >= 0) {
-      shutdown(fd_, SHUT_RDWR);
-    }
-    if (thread_.joinable()) {
-      thread_.join();
-    }
-    if (fd_ >= 0) {
-      close(fd_);
-      fd_ = -1;
-    }
+  ~Hub() { for (auto& entry : endpoints_) stop(*entry.second); }
+  static void stop(Endpoint& endpoint) {
+    endpoint.stopping.store(true);
+    shutdown(endpoint.fd, SHUT_RDWR);
+    if (endpoint.thread.joinable()) endpoint.thread.join();
+    close(endpoint.fd);
   }
 
-  void start() {
-    bool expected = false;
-    if (!started_.compare_exchange_strong(expected, true)) {
-      return;
-    }
-    fd_ = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd_ < 0) {
-      started_.store(false);
-      return;
-    }
-    int reuse = 1;
-    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(static_cast<uint16_t>(kPort));
-    if (bind(fd_, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-      close(fd_);
-      fd_ = -1;
-      started_.store(false);
-      return;
-    }
-    thread_ = std::thread(&Hub::loop, this);
-  }
-
-  void loop() {
+  void loop(Endpoint& endpoint) {
     // Read one extra byte: recvfrom truncation must not make an oversized
     // datagram look like an exact-length request.
     unsigned char buf[kRequestBytes + 1];
-    while (!stop_.load(std::memory_order_acquire)) {
+    while (!endpoint.stopping.load(std::memory_order_acquire)) {
       sockaddr_in from;
       socklen_t from_len = sizeof(from);
-      const ssize_t n = recvfrom(fd_, buf, sizeof(buf), 0,
+      const ssize_t n = recvfrom(endpoint.fd, buf, sizeof(buf), 0,
                                  reinterpret_cast<sockaddr *>(&from), &from_len);
       if (n < 0) {
         if (errno == EINTR) {
@@ -132,7 +141,7 @@ class Hub {
       char robot[kRobotIdBytes + 1];
       std::memcpy(robot, buf + 12, kRobotIdBytes);
       robot[kRobotIdBytes] = '\0';
-      const bool matched = registry_.apply(robot, held);
+      const bool matched = endpoint.robot == robot && registry_.apply(robot, held);
       unsigned char ack[kAckBytes];
       std::memset(ack, 0, sizeof(ack));
       writeU32LE(ack, kMagic);
@@ -140,16 +149,14 @@ class Hub {
       ack[5] = held ? 1 : 0;
       ack[6] = matched ? 0 : 1;
       writeU32LE(ack + 8, request_id);
-      sendto(fd_, ack, sizeof(ack), 0, reinterpret_cast<sockaddr *>(&from),
+      sendto(endpoint.fd, ack, sizeof(ack), 0, reinterpret_cast<sockaddr *>(&from),
              from_len);
     }
   }
 
   GateRegistry registry_;
-  std::atomic<bool> started_{false};
-  std::atomic<bool> stop_{false};
-  int fd_ = -1;
-  std::thread thread_;
+  std::mutex mutex_;
+  std::map<Gate*, std::unique_ptr<Endpoint>> endpoints_;
 };
 
 }  // namespace xgc_chassis_hold

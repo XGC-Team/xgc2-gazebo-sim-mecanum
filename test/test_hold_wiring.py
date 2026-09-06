@@ -37,8 +37,8 @@ class HoldWiringTest(unittest.TestCase):
         self.assertIn('registry_.apply(robot, held)', udp)
         self.assertIn('registry_.remove(gate)', udp)
         self.assertNotIn('Gate *match(', udp)
-        shutdown = udp.split('~Hub()', 1)[1].split('void start()', 1)[0]
-        self.assertLess(shutdown.index('thread_.join()'), shutdown.index('close(fd_)'))
+        shutdown = udp.split('static void stop(', 1)[1].split('void run(', 1)[0]
+        self.assertLess(shutdown.index('endpoint.thread.join()'), shutdown.index('close(endpoint.fd)'))
 
 
 if __name__ == '__main__':
