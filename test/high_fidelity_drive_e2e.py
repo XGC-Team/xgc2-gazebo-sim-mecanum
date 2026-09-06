@@ -163,7 +163,7 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         self.publish_command(0, 0, 0, 0.5)
 
     def test_06_hold_and_repeated_model_lifetime(self):
-        def hold(robot, value, sequence):
+        def hold(robot, value, sequence, deletion=None):
             digest = 2166136261
             for byte in robot.encode():
                 digest = ((digest ^ byte) * 16777619) & 0xffffffff
@@ -173,12 +173,19 @@ class HighFidelityDriveContractTest(unittest.TestCase):
                                           sequence, robot.encode()),
                               ("127.0.0.1", 20000 + digest % 20000))
                 ack, _ = client.recvfrom(1024)
-            self.assertEqual(ack, struct.pack("<IBBBBI", 0x58474348, 1, value, 0, 0, sequence))
+            self.assertEqual(len(ack), 12)
+            # Registry removal precedes socket close. A request racing that
+            # interval is explicitly rejected, rather than calling a dead Gate.
+            status = 1 if deletion is not None and deletion.is_set() and ack[6] == 1 else 0
+            self.assertEqual(ack, struct.pack("<IBBBBI", 0x58474348, 1, value, status, 0, sequence))
 
         source = rospy.get_param("/ugv1/gazebo_model_sdf").replace("ugv1", "ugv2")
         pose = ModelState().pose
         pose.orientation.w = 1
         pose.position.y = 3
+        second_command = rospy.Publisher("/ugv2/cmd_vel", Twist, queue_size=1)
+        moving = Twist()
+        moving.linear.x = 0.8
         for cycle in range(4):
             self.assertTrue(self.spawn_model("ugv2", source, "", pose, "world").success)
             rospy.sleep(0.1)
@@ -191,12 +198,15 @@ class HighFidelityDriveContractTest(unittest.TestCase):
             hold("ugv1", False, 30 + cycle)
             rospy.sleep(0.15)
             self.assertLess(math.hypot(self.latest_twist().linear.x, self.latest_twist().linear.y), 0.04)
+            self.assertGreater(second_command.get_num_connections(), 0)
             stopping = threading.Event()
+            deletion = threading.Event()
             errors = []
             def concurrent_hold():
                 while not stopping.is_set():
                     try:
-                        hold("ugv2", True, 40 + cycle)
+                        second_command.publish(moving)
+                        hold("ugv2", True, 40 + cycle, deletion)
                     except (socket.timeout, ConnectionRefusedError):
                         pass  # The endpoint is absent during intentional deletion.
                     except Exception as error:
@@ -205,6 +215,7 @@ class HighFidelityDriveContractTest(unittest.TestCase):
             sender.start()
             rospy.sleep(0.1)
             try:
+                deletion.set()
                 self.assertTrue(self.delete_model("ugv2").success)
             finally:
                 stopping.set()
