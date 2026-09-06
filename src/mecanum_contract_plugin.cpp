@@ -23,6 +23,7 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/JointState.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Float64MultiArray.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
@@ -181,11 +182,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
         gzerr << "[gazebo_sim_mecanum] Invalid high-fidelity body or wheel radius\n";
         return;
       }
-      double total_mass = 0.0;
-      for (const auto& link : model_->GetLinks()) {
-        total_mass += link->GetInertial()->Mass();
-      }
-      normal_force_per_wheel_ = total_mass * 9.80665 / static_cast<double>(kWheelCount);
+      contact_manager_ = model_->GetWorld()->Physics()->GetContactManager();
+      // Contact force feedback must exist even when no external contact sensor
+      // subscribes. Read only the current physics step's active contacts.
+      contact_manager_->SetNeverDropContacts(true);
     }
 
     ros_node_->param("state_publish_rate", state_publish_rate_, state_publish_rate_);
@@ -214,6 +214,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     max_left_velocity_ = std::abs(max_left_velocity_);
     max_yaw_velocity_ = std::abs(max_yaw_velocity_);
 
+    traction_publisher_ = ros_node_->advertise<std_msgs::Float64MultiArray>("simulation/traction", 1, false);
     pose_publisher_ = ros_node_->advertise<geometry_msgs::PoseStamped>(kSimulationGroundTruthPoseTopic, 10, false);
     twist_publisher_ = ros_node_->advertise<geometry_msgs::TwistStamped>(kSimulationGroundTruthTwistTopic, 10, false);
     imu_publisher_ = ros_node_->advertise<sensor_msgs::Imu>(imu_topic, 10, false);
@@ -392,6 +393,43 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     model_->SetAngularVel(ignition::math::Vector3d(0.0, 0.0, yaw_velocity));
   }
 
+  struct ContactPatch {
+    double load;
+    ignition::math::Vector3d normal, position;
+    gazebo::physics::LinkPtr other;
+  };
+  struct ContactLoad { double load = 0.0; std::vector<ContactPatch> patches; };
+
+  std::array<ContactLoad, kWheelCount> WheelContactLoads() const {
+    std::array<ContactLoad, kWheelCount> loads;
+    if (!contact_manager_) return loads;
+    const auto& contacts = contact_manager_->GetContacts();
+    const unsigned count = std::min<unsigned>(contact_manager_->GetContactCount(), contacts.size());
+    for (unsigned i = 0; i < count; ++i) {
+      const auto* contact = contacts[i];
+      if (!contact || !contact->collision1 || !contact->collision2) continue;
+      const auto first = contact->collision1->GetLink();
+      const auto second = contact->collision2->GetLink();
+      if (!first || !second || first->GetModel() == second->GetModel()) continue;
+      for (std::size_t wheel = 0; wheel < kWheelCount; ++wheel) {
+        const auto link = wheel_joints_[wheel]->GetChild();
+        const bool is_first = first == link;
+        if (!is_first && second != link) continue;
+        for (int point = 0; point < contact->count; ++point) {
+          auto normal = contact->normals[point];
+          if (!normal.IsFinite() || normal.Length() < 1e-9) continue;
+          normal.Normalize();
+          const auto force = is_first ? contact->wrench[point].body1Force : contact->wrench[point].body2Force;
+          const double load = std::abs(force.Dot(normal));
+          if (!std::isfinite(load) || load <= 0.0) continue;
+          loads[wheel].load += load;
+          loads[wheel].patches.push_back({load, normal, contact->positions[point], is_first ? second : first});
+        }
+      }
+    }
+    return loads;
+  }
+
   void ApplyWheelDynamics(double dt) {
     double front_velocity;
     double left_velocity;
@@ -409,7 +447,9 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     const ignition::math::Pose3d pose = model_->WorldPose();
     const ignition::math::Vector3d body_velocity = pose.Rot().RotateVectorReverse(model_->WorldLinearVel());
     const double body_yaw_rate = model_->WorldAngularVel().Z();
-    const double max_traction = friction_coefficient_ * normal_force_per_wheel_;
+    const auto contact_loads = WheelContactLoads();
+    std_msgs::Float64MultiArray traction_report;
+    traction_report.data.resize(8, 0.0);
     double body_force_x = -linear_drag_ * body_velocity.X();
     double body_force_y = -linear_drag_ * body_velocity.Y();
     double body_torque_z = -angular_drag_ * body_yaw_rate;
@@ -423,18 +463,36 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       const double contact_ground_speed = body_velocity.X() + lateral_sign[index] * body_velocity.Y() +
                                           yaw_sign[index] * wheelbase_sum_ * body_yaw_rate;
       const double slip_speed = wheel_radius_ * effective_wheel_speed - contact_ground_speed;
-      const double traction = ClampFinite(traction_gain_ * slip_speed, max_traction);
+      const double normal_load = contact_loads[index].load;
+      const double traction = ClampFinite(traction_gain_ * slip_speed, friction_coefficient_ * normal_load);
+      traction_report.data[index] = normal_load;
+      traction_report.data[index + kWheelCount] = traction;
       const double motor_torque =
           ClampFinite(wheel_pid_p_ * (target_joint_speed - joint_speed), wheel_torque_limit_);
       const double reaction_torque = joint_sign[index] * wheel_radius_ * traction;
       wheel_joints_[index]->SetForce(0, motor_torque - reaction_torque);
 
-      // The 1/2 factor is the virtual-work mapping for the 45-degree roller
-      // directions used by the standard four-wheel Mecanum Jacobian.
-      body_force_x += 0.5 * traction;
-      body_force_y += 0.5 * lateral_sign[index] * traction;
-      body_torque_z += 0.5 * yaw_traction_scale_ * yaw_sign[index] * wheelbase_sum_ * traction;
+      // The planar roller Jacobian is projected onto each actual contact
+      // tangent. No contact/normal support means no external ground traction.
+      const ignition::math::Vector3d roller = pose.Rot().RotateVector(
+          ignition::math::Vector3d(0.5, 0.5 * lateral_sign[index], 0.0));
+      for (const auto& patch : contact_loads[index].patches) {
+        const auto direction = roller - patch.normal * roller.Dot(patch.normal);
+        const auto force = direction * (traction * patch.load / normal_load);
+        body_link_->AddForceAtWorldPosition(force, patch.position);
+        // Preserve the authored yaw response scaling on the body-normal axis.
+        const auto body_z = pose.Rot().RotateVector(ignition::math::Vector3d::UnitZ);
+        const auto lever_torque = (patch.position - body_link_->WorldCoGPose().Pos()).Cross(force);
+        const auto correction = body_z * ((yaw_traction_scale_ - 1.0) * lever_torque.Dot(body_z));
+        body_link_->AddTorque(correction);
+        if (patch.other && !patch.other->GetModel()->IsStatic()) {
+          patch.other->AddForceAtWorldPosition(-force, patch.position);
+          patch.other->AddTorque(-correction);
+        }
+      }
     }
+
+    if (traction_publisher_.getNumSubscribers() > 0) traction_publisher_.publish(traction_report);
 
     if (dt > 0.0 && std::isfinite(body_force_x) && std::isfinite(body_force_y) &&
         std::isfinite(body_torque_z)) {
@@ -609,7 +667,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   double wheel_torque_limit_{1.2};
   double traction_gain_{18.0};
   double friction_coefficient_{0.85};
-  double normal_force_per_wheel_{0.0};
+  gazebo::physics::ContactManager* contact_manager_{nullptr};
+  ros::Publisher traction_publisher_;
   double linear_drag_{0.10};
   double angular_drag_{0.02};
   double yaw_traction_scale_{0.45};

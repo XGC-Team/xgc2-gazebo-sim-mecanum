@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import math
+import socket
+import struct
 import threading
 import time
 import unittest
@@ -10,7 +12,7 @@ from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import DeleteModel, GetJointProperties, SetModelState, SpawnModel
 from geometry_msgs.msg import PoseStamped, Twist, TwistStamped
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float64MultiArray
 
 
 class HighFidelityDriveContractTest(unittest.TestCase):
@@ -22,6 +24,8 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         cls.twists = []
         cls.joint_state = None
         cls.voltage = None
+        cls.traction = []
+        rospy.Subscriber("/ugv1/simulation/traction", Float64MultiArray, cls._traction_callback, queue_size=2000)
         rospy.Subscriber("/ugv1/simulation/ground_truth/pose", PoseStamped, cls._pose_callback, queue_size=1)
         rospy.Subscriber("/ugv1/simulation/ground_truth/twist", TwistStamped, cls._twist_callback, queue_size=500)
         rospy.Subscriber("/ugv1/joint_states", JointState, cls._joint_callback, queue_size=1)
@@ -73,6 +77,122 @@ class HighFidelityDriveContractTest(unittest.TestCase):
     def _voltage_callback(cls, message):
         with cls.lock:
             cls.voltage = message
+
+    @classmethod
+    def _traction_callback(cls, message):
+        with cls.lock:
+            cls.traction.append(list(message.data))
+            del cls.traction[:-4000]
+
+    def test_04_contact_loss_rollover_and_recontact(self):
+        self.publish_command(0, 0, 0, 0.5)
+        state = ModelState()
+        state.model_name = "ugv1"
+        state.reference_frame = "world"
+        state.pose.orientation.w = 1
+        state.pose.position.z = 4
+        self.assertTrue(self.set_model(state).success)
+        rospy.sleep(0.04)  # Discard contact data from the previous physics step.
+        with self.lock:
+            self.traction.clear()
+        self.publish_command(0.8, 0.3, 0.5, 0.25)
+        with self.lock:
+            airborne = list(self.traction)
+        self.assertGreater(len(airborne), 30)
+        self.assertTrue(all(len(row) == 8 for row in airborne))
+        self.assertTrue(all(max(abs(v) for v in row) < 1e-9 for row in airborne), airborne[-5:])
+        self.assertLess(math.hypot(self.latest_twist().linear.x, self.latest_twist().linear.y), 0.03)
+
+        self.publish_command(0, 0, 0, 0.1)
+        pedestal = """<sdf version='1.6'><model name='roof_support'><static>true</static>
+          <link name='support'><pose>0 0 0.1 0 0 0</pose><collision name='collision'>
+          <geometry><box><size>0.20 0.20 0.20</size></box></geometry>
+          </collision></link></model></sdf>"""
+        origin = ModelState().pose
+        origin.orientation.w = 1
+        self.assertTrue(self.spawn_model("roof_support", pedestal, "", origin, "world").success)
+        state.pose.position.z = 0.4
+        state.pose.orientation.w = 0
+        state.pose.orientation.x = 1  # Rest on chassis roof, wheels above ground.
+        self.assertTrue(self.set_model(state).success)
+        rospy.sleep(0.5)
+        with self.lock:
+            self.traction.clear()
+        self.publish_command(0.8, 0.3, 0.5, 0.3)
+        with self.lock:
+            inverted = list(self.traction)
+        self.assertGreater(len(inverted), 30)
+        self.assertTrue(all(max(abs(v) for v in row) < 1e-9 for row in inverted), inverted[-5:])
+
+        self.publish_command(0, 0, 0, 0.1)
+        self.assertTrue(self.delete_model("roof_support").success)
+        state.pose.position.z = 0
+        state.pose.orientation.w = 1
+        state.pose.orientation.x = 0
+        self.assertTrue(self.set_model(state).success)
+        rospy.sleep(0.6)
+        with self.lock:
+            self.traction.clear()
+        self.publish_command(0.8, 0, 0, 1.2)
+        with self.lock:
+            recovered = list(self.traction)
+        self.assertTrue(any(sum(row[:4]) > 10 and sum(abs(v) for v in row[4:]) > 0.1 for row in recovered))
+        self.assertGreater(self.latest_twist().linear.x, 0.65)
+        self.publish_command(0, 0, 0, 0.5)
+
+    def test_05_partial_contact(self):
+        state = ModelState()
+        state.model_name = "ugv1"
+        state.reference_frame = "world"
+        state.pose.position.z = 0.12
+        state.pose.orientation.x = math.sin(0.18)
+        state.pose.orientation.w = math.cos(0.18)
+        self.assertTrue(self.set_model(state).success)
+        with self.lock:
+            self.traction.clear()
+        self.publish_command(0.8, 0, 0, 0.5)
+        with self.lock:
+            samples = list(self.traction)
+        partial = [row for row in samples if 0 < sum(v > 1e-6 for v in row[:4]) < 4]
+        self.assertGreater(len(partial), 5, "tilted landing must exercise partially supported wheels")
+        for row in partial:
+            for index, load in enumerate(row[:4]):
+                if load == 0:
+                    self.assertEqual(row[index + 4], 0)
+                self.assertLessEqual(abs(row[index + 4]), 0.85 * load + 1e-9)
+        self.publish_command(0, 0, 0, 0.5)
+
+    def test_06_hold_and_repeated_model_lifetime(self):
+        def hold(robot, value, sequence):
+            digest = 2166136261
+            for byte in robot.encode():
+                digest = ((digest ^ byte) * 16777619) & 0xffffffff
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+                client.settimeout(2)
+                client.sendto(struct.pack("<IBBHI32s", 0x58474348, 1, value, 0,
+                                          sequence, robot.encode()),
+                              ("127.0.0.1", 20000 + digest % 20000))
+                ack, _ = client.recvfrom(1024)
+            self.assertEqual(ack, struct.pack("<IBBBBI", 0x58474348, 1, value, 0, 0, sequence))
+
+        source = rospy.get_param("/ugv1/gazebo_model_sdf").replace("ugv1", "ugv2")
+        pose = ModelState().pose
+        pose.orientation.w = 1
+        pose.position.y = 3
+        for cycle in range(4):
+            self.assertTrue(self.spawn_model("ugv2", source, "", pose, "world").success)
+            rospy.sleep(0.1)
+            hold("ugv2", True, 10 + cycle)
+            self.publish_command(0.8, 0, 0, 0.7)
+            self.assertGreater(self.latest_twist().linear.x, 0.5)
+            hold("ugv1", True, 20 + cycle)
+            self.publish_command(0.8, 0, 0, 1.5)
+            self.assertLess(math.hypot(self.latest_twist().linear.x, self.latest_twist().linear.y), 0.04)
+            hold("ugv1", False, 30 + cycle)
+            rospy.sleep(0.15)
+            self.assertLess(math.hypot(self.latest_twist().linear.x, self.latest_twist().linear.y), 0.04)
+            self.assertTrue(self.delete_model("ugv2").success)
+        self.publish_command(0, 0, 0, 0.3)
 
     def publish_command(self, x, y, yaw_rate, duration):
         message = Twist()

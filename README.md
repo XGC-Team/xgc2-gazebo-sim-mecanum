@@ -66,3 +66,37 @@ the installed launch file, model meshes, and Gazebo plugin to their canonical
 absolute paths. Source development stages a separate immutable release pointing
 directly at the checked-out `spawn.launch`, mesh directory, and freshly built
 plugin; it never falls back to a stale or missing `/opt` package.
+
+## Contact-bound traction regression
+
+The high-fidelity approximation reads Gazebo's active wheel contact forces.
+Each wheel's longitudinal roller effort is bounded by its measured normal load
+and `frictionCoefficient`; unsupported wheels contribute zero ground traction.
+Forces act along the contact tangent at the actual contact point, with an equal
+opposite reaction on a dynamic contacted body. Existing motor inertia, internal
+wheel torque, linear/angular drag and authored yaw response scaling remain
+separate. The planar roller slip approximation is not a detailed roller/contact
+material model. Gazebo contact feedback reflects the preceding physics update.
+
+`/<robot>/simulation/traction` publishes `Float64MultiArray` when subscribed:
+first four entries are normal loads (N), last four are bounded roller efforts
+(N), ordered upper-left, upper-right, lower-left, lower-right. These are simulator
+diagnostics, not measured hardware forces. Contact feedback is enabled globally
+in the world's ContactManager so evidence exists without a contact sensor.
+
+In an isolated ROS Noetic/Gazebo 11 catkin workspace containing this package and
+`mecanum_description`, build then run:
+
+```bash
+catkin_make -DCMAKE_BUILD_TYPE=Release
+source devel/setup.bash
+rostest gazebo_sim_mecanum high_fidelity_drive.test
+```
+
+Six runtime tests cover flat forward/sideways/yaw response, physical wheels,
+gravity/wall collision, airborne and roof-supported inverted zero traction,
+recontact, tilted partial support, and repeated HOLD/release plus model
+spawn/delete. They use disposable simulation models only. HOLD checks allow
+1.5 simulation seconds for physical braking; acknowledgment does not claim
+instantaneous removal of inertia. The deterministic Gate suite separately
+checks serialized target writes and callback lifetime with sanitizers.
