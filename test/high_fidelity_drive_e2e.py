@@ -191,7 +191,26 @@ class HighFidelityDriveContractTest(unittest.TestCase):
             hold("ugv1", False, 30 + cycle)
             rospy.sleep(0.15)
             self.assertLess(math.hypot(self.latest_twist().linear.x, self.latest_twist().linear.y), 0.04)
-            self.assertTrue(self.delete_model("ugv2").success)
+            stopping = threading.Event()
+            errors = []
+            def concurrent_hold():
+                while not stopping.is_set():
+                    try:
+                        hold("ugv2", True, 40 + cycle)
+                    except (socket.timeout, ConnectionRefusedError):
+                        pass  # The endpoint is absent during intentional deletion.
+                    except Exception as error:
+                        errors.append(error)
+            sender = threading.Thread(target=concurrent_hold)
+            sender.start()
+            rospy.sleep(0.1)
+            try:
+                self.assertTrue(self.delete_model("ugv2").success)
+            finally:
+                stopping.set()
+                sender.join(timeout=3)
+            self.assertFalse(sender.is_alive())
+            self.assertFalse(errors)
         self.publish_command(0, 0, 0, 0.3)
 
     def publish_command(self, x, y, yaw_rate, duration):
