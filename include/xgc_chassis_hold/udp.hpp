@@ -107,7 +107,9 @@ class Hub {
   }
 
   void loop() {
-    unsigned char buf[kRequestBytes];
+    // Read one extra byte: recvfrom truncation must not make an oversized
+    // datagram look like an exact-length request.
+    unsigned char buf[kRequestBytes + 1];
     while (!stop_.load(std::memory_order_acquire)) {
       sockaddr_in from;
       socklen_t from_len = sizeof(from);
