@@ -47,8 +47,8 @@
         <pose>0 0 0.05 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/nexus_base_link.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/nexus_base_link.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -60,8 +60,8 @@
         <pose>0.150 0.108 0.05 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/wheel_shaft.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/wheel_shaft.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -73,8 +73,8 @@
         <pose>-0.150 0.108 0.05 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/wheel_shaft.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/wheel_shaft.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -86,8 +86,8 @@
         <pose>0.150 -0.108 0.05 3.141592653589793 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/wheel_shaft.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/wheel_shaft.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -99,8 +99,8 @@
         <pose>-0.150 -0.108 0.05 3.141592653589793 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/wheel_shaft.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/wheel_shaft.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -112,8 +112,8 @@
         <pose>0.205 0 0.06 1.5707963267948966 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/urm04.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/urm04.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -125,8 +125,8 @@
         <pose>0 0.108 0.06 1.5707963267948966 0 1.5707963267948966</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/urm04.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/urm04.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -138,8 +138,8 @@
         <pose>0 -0.108 0.06 1.5707963267948966 0 -1.5707963267948966</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/urm04.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/urm04.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -151,8 +151,8 @@
         <pose>-0.201 0 0.06 1.5707963267948966 0 3.141592653589793</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/urm04.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/urm04.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -191,8 +191,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/mecanum_wheel_left.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/mecanum_wheel_left.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -265,8 +265,8 @@
         <pose>0 0 0 3.141592653589793 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/mecanum_wheel_right.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/mecanum_wheel_right.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -339,8 +339,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/mecanum_wheel_right.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/mecanum_wheel_right.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>
@@ -413,8 +413,8 @@
         <pose>0 0 0 3.141592653589793 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mecanum_description/meshes/mecanum_wheel_left.STL</uri>
-            <scale>0.001 0.001 0.001</scale>
+            <uri>model://mecanum_description/meshes/lod10k/mecanum_wheel_left.dae</uri>
+            <scale>1 1 1</scale>
           </mesh>
         </geometry>
         <material>

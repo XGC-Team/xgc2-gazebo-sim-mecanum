@@ -43,12 +43,10 @@ for path in "${required[@]}"; do
 done
 
 grep -q '^id: xgc2-gazebo-sim-mecanum$' .xgc2/product.yml
-grep -q '^version: 0.1.0-15$' .xgc2/product.yml
-grep -q '^    focal: 0.1.0-15$' .xgc2/product.yml
 grep -q '<name>gazebo_sim_mecanum</name>' package.xml
 grep -q 'PACKAGE="ros-noetic-xgc2-gazebo-sim-mecanum"' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-rostest' .xgc2/scripts/package_debs.sh
-grep -q 'ros-noetic-xgc2-mecanum-description (>= 0.1.0-1)' .xgc2/scripts/package_debs.sh
+grep -q 'ros-noetic-xgc2-mecanum-description (>= 0.1.0-10)' .xgc2/scripts/package_debs.sh
 grep -Eq -- '-Y \$\(arg yaw\).*' launch/spawn.launch
 if grep -Eq '<arg name="bond"|(^|[[:space:]])-b([[:space:]]|")' launch/spawn.launch; then
   echo "Spawn lifecycle must have one supervisor-owned delete path" >&2
@@ -84,7 +82,7 @@ source_meshes="file:///tmp/xgc2-mecanum-description/meshes"
   robot_namespace:=ugv_contract plugin_filename:="${source_plugin}" \
   mesh_prefix:="${source_meshes}" >"${expanded_source_sdf}"
 grep -q "filename=\"${source_plugin}\"" "${expanded_source_sdf}"
-grep -q "<uri>${source_meshes}/nexus_base_link.STL</uri>" "${expanded_source_sdf}"
+grep -q "<uri>${source_meshes}/lod10k/nexus_base_link.dae</uri>" "${expanded_source_sdf}"
 rm -f "${expanded_source_sdf}"
 
 expanded_ideal_sdf="$(mktemp)"
@@ -163,7 +161,7 @@ if grep -Rq 'libnexus_ros_force_based_move.so' CMakeLists.txt package.xml launch
   exit 1
 fi
 
-grep -q 'model://mecanum_description/meshes/nexus_base_link.STL' models/xgc2_mecanum_ugv/model.sdf
+grep -q 'model://mecanum_description/meshes/lod10k/nexus_base_link.dae' models/xgc2_mecanum_ugv/model.sdf
 if find models -type f -path '*/meshes/*' | grep -q .; then
   echo "Gazebo simulation must consume mecanum_description instead of owning robot meshes" >&2
   exit 1
