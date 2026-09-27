@@ -3,6 +3,8 @@
   <arg name="ns" default="ugv1"/>
   <arg name="model_name" default="$(arg ns)"/>
   <arg name="drive_model" default="high_fidelity"/>
+  <arg name="enable_simple_lidar" default="false"/>
+  <arg name="simple_lidar_pose" default="0 0 0.28 0 0 0"/>
   <arg name="world_name" default="$(find gazebo_sim_worlds)/worlds/empty/empty.world"/>
   <arg name="gui" default="true"/>
   <arg name="paused" default="false"/>
@@ -35,6 +37,8 @@
     <arg name="ns" value="$(arg ns)"/>
     <arg name="model_name" value="$(arg model_name)"/>
     <arg name="drive_model" value="$(arg drive_model)"/>
+    <arg name="enable_simple_lidar" value="$(arg enable_simple_lidar)"/>
+    <arg name="simple_lidar_pose" value="$(arg simple_lidar_pose)"/>
     <arg name="x" value="$(arg x)"/>
     <arg name="y" value="$(arg y)"/>
     <arg name="z" value="$(arg z)"/>

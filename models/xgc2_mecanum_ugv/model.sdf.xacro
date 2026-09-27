@@ -4,6 +4,8 @@
   <xacro:arg name="drive_model" default="high_fidelity"/>
   <xacro:arg name="plugin_filename" default="libgazebo_sim_mecanum_contract.so"/>
   <xacro:arg name="mesh_prefix" default="model://mecanum_description/meshes"/>
+  <xacro:arg name="enable_simple_lidar" default="false"/>
+  <xacro:arg name="simple_lidar_pose" default="0 0 0.28 0 0 0"/>
   <xacro:property name="xgc_pi" value="3.141592653589793"/>
   <xacro:property name="high_fidelity" value="${'$(arg drive_model)' == 'high_fidelity'}"/>
 
@@ -111,6 +113,13 @@
         <geometry><box><size>0.02 0.08 0.01</size></box></geometry>
         <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
       </visual>
+
+      <xacro:if value="$(arg enable_simple_lidar)">
+        <xacro:include filename="$(find xgc2_simple_lidar)/models/sensor.xacro"/>
+        <xacro:xgc2_simple_lidar_sensor
+          namespace="$(arg robot_namespace)"
+          pose="$(arg simple_lidar_pose)"/>
+      </xacro:if>
     </link>
 
     <xacro:if value="${high_fidelity}">

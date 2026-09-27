@@ -60,9 +60,14 @@ install(FILES LICENSE MODEL_ASSET_NOTICE.md
 )
 
 if(CATKIN_ENABLE_TESTING)
+  find_package(PythonInterp 3 REQUIRED)
   find_package(roslaunch REQUIRED)
   find_package(rostest REQUIRED)
   roslaunch_add_file_check(launch)
+  add_test(
+    NAME mecanum_optional_simple_lidar_render
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_simple_lidar_render.py
+  )
   add_rostest(test/ideal_drive.test)
   add_rostest(test/high_fidelity_drive.test)
 

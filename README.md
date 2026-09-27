@@ -67,6 +67,12 @@ absolute paths. Source development stages a separate immutable release pointing
 directly at the checked-out `spawn.launch`, mesh directory, and freshly built
 plugin; it never falls back to a stale or missing `/opt` package.
 
+The optional GPU simple lidar is off by default. Enable it with
+`roslaunch gazebo_sim_mecanum simple.launch ns:=ugv1 enable_simple_lidar:=true`.
+Its default mount pose in `base_footprint` is `0 0 0.28 0 0 0`; override it with
+`simple_lidar_pose` when needed. The points topic follows the robot namespace,
+for example `/ugv1/simple_lidar/points`.
+
 ## Contact-bound traction regression
 
 The high-fidelity approximation reads Gazebo's active wheel contact forces.

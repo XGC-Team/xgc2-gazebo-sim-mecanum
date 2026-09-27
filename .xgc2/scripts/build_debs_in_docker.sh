@@ -38,13 +38,15 @@ docker run --rm \
     apt-get update
     apt-get install -y --no-install-recommends \
       ros-noetic-xgc2-mecanum-description \
-      ros-noetic-xgc2-gazebo-sim-worlds
+      ros-noetic-xgc2-gazebo-sim-worlds \
+      ros-noetic-xgc2-simple-lidar
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src/xgc2-gazebo-sim-mecanum
     rsync -a --delete /workspace/repo/ /workspace/work/src/xgc2-gazebo-sim-mecanum/
     cd /workspace/work
     source /opt/ros/noetic/setup.bash
+    python3 /workspace/repo/test/test_simple_lidar_render.py
     catkin_make -DCMAKE_BUILD_TYPE=Release
     LIBGL_ALWAYS_SOFTWARE=1 catkin_make run_tests_gazebo_sim_mecanum
     catkin_test_results
