@@ -6,6 +6,13 @@
   <xacro:arg name="mesh_prefix" default="model://mecanum_description/meshes"/>
   <xacro:arg name="enable_simple_lidar" default="false"/>
   <xacro:arg name="simple_lidar_pose" default="0 0 0.28 0 0 0"/>
+  <xacro:arg name="simple_lidar_acceleration" default="gpu"/>
+  <xacro:arg name="simple_lidar_rate_hz" default="10"/>
+  <xacro:arg name="simple_lidar_range_meters" default="20"/>
+  <xacro:arg name="simple_lidar_hfov_deg" default="360"/>
+  <xacro:arg name="simple_lidar_vfov_deg" default="57.29577951308232"/>
+  <xacro:arg name="simple_lidar_hres" default="360"/>
+  <xacro:arg name="simple_lidar_vres" default="16"/>
   <xacro:property name="xgc_pi" value="3.141592653589793"/>
   <xacro:property name="high_fidelity" value="${'$(arg drive_model)' == 'high_fidelity'}"/>
 
@@ -118,7 +125,7 @@
         <xacro:include filename="$(find xgc2_simple_lidar)/models/sensor.xacro"/>
         <xacro:xgc2_simple_lidar_sensor
           namespace="$(arg robot_namespace)"
-          pose="$(arg simple_lidar_pose)"/>
+          pose="$(arg simple_lidar_pose)" acceleration="$(arg simple_lidar_acceleration)" rate="$(arg simple_lidar_rate_hz)" max_range="$(arg simple_lidar_range_meters)" samples="$(arg simple_lidar_hres)" layers="$(arg simple_lidar_vres)" horizontal_fov="${float('$(arg simple_lidar_hfov_deg)') * pi / 180}" vertical_fov="${float('$(arg simple_lidar_vfov_deg)') * pi / 180}"/>
       </xacro:if>
     </link>
 

@@ -5,6 +5,13 @@
   <arg name="drive_model" default="high_fidelity"/>
   <arg name="enable_simple_lidar" default="false"/>
   <arg name="simple_lidar_pose" default="0 0 0.28 0 0 0"/>
+  <arg name="simple_lidar_acceleration" default="gpu"/>
+  <arg name="simple_lidar_rate_hz" default="10"/>
+  <arg name="simple_lidar_range_meters" default="20"/>
+  <arg name="simple_lidar_hfov_deg" default="360"/>
+  <arg name="simple_lidar_vfov_deg" default="57.29577951308232"/>
+  <arg name="simple_lidar_hres" default="360"/>
+  <arg name="simple_lidar_vres" default="16"/>
   <arg name="x" default="0.0"/>
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.0"/>
@@ -38,7 +45,7 @@
   </group>
 
   <param name="/$(arg ns)/gazebo_model_sdf"
-         command="$(find xacro)/xacro $(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=$(arg ns) drive_model:=$(arg drive_model) plugin_filename:=$(arg plugin_filename) mesh_prefix:=$(arg mesh_prefix) enable_simple_lidar:=$(arg enable_simple_lidar) simple_lidar_pose:='$(arg simple_lidar_pose)'"/>
+         command="$(find xacro)/xacro $(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro robot_namespace:=$(arg ns) drive_model:=$(arg drive_model) plugin_filename:=$(arg plugin_filename) mesh_prefix:=$(arg mesh_prefix) enable_simple_lidar:=$(arg enable_simple_lidar) simple_lidar_pose:='$(arg simple_lidar_pose)' simple_lidar_acceleration:=$(arg simple_lidar_acceleration) simple_lidar_rate_hz:=$(arg simple_lidar_rate_hz) simple_lidar_range_meters:=$(arg simple_lidar_range_meters) simple_lidar_hfov_deg:=$(arg simple_lidar_hfov_deg) simple_lidar_vfov_deg:=$(arg simple_lidar_vfov_deg) simple_lidar_hres:=$(arg simple_lidar_hres) simple_lidar_vres:=$(arg simple_lidar_vres)"/>
   <node pkg="gazebo_ros" type="spawn_model"
         name="spawn_$(arg model_name)" output="screen"
         launch-prefix="flock -x /tmp/xgc2-gazebo-spawn.lock"
