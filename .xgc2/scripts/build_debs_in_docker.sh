@@ -43,7 +43,7 @@ docker run --rm \
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src/xgc2-gazebo-sim-mecanum
-    rsync -a --delete /workspace/repo/ /workspace/work/src/xgc2-gazebo-sim-mecanum/
+    rsync -a --delete --exclude=.git --exclude=.work --exclude=.ci --exclude=debs /workspace/repo/ /workspace/work/src/xgc2-gazebo-sim-mecanum/
     cd /workspace/work
     source /opt/ros/noetic/setup.bash
     python3 /workspace/repo/test/test_simple_lidar_render.py

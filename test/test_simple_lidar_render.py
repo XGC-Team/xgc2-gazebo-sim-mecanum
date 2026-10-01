@@ -2,6 +2,7 @@
 """Render-only checks for the optional Wheeltec simple lidar mount."""
 
 import os
+import math
 from pathlib import Path
 import shutil
 import subprocess
@@ -32,7 +33,7 @@ def installed_simple_lidar_package():
 
 
 def render_model(drive_model="high_fidelity", namespace="ugv1", enabled=False,
-                 pose="0 0 0.28 0 0 0"):
+                 pose="0 0 0.28 0 0 0", extra=None):
     if XACRO is None:
         raise AssertionError("xacro executable is required for render checks")
 
@@ -54,6 +55,7 @@ def render_model(drive_model="high_fidelity", namespace="ugv1", enabled=False,
         "enable_simple_lidar:={}".format("true" if enabled else "false"),
         "simple_lidar_pose:={}".format(pose),
     ]
+    command.extend(extra or [])
     result = subprocess.run(command, cwd=str(PACKAGE_ROOT), env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             universal_newlines=True)
@@ -94,6 +96,23 @@ def sensor_pose(sensor):
 
 
 class SimpleLidarRenderTest(unittest.TestCase):
+    def test_cpu_native_scan_keeps_authored_parameters(self):
+        root = render_model(namespace='ugv2', enabled=True,
+                            extra=['simple_lidar_acceleration:=cpu', 'simple_lidar_rate_hz:=12',
+                                   'simple_lidar_range_meters:=8', 'simple_lidar_hfov_deg:=120',
+                                   'simple_lidar_vfov_deg:=40', 'simple_lidar_hres:=90',
+                                   'simple_lidar_vres:=8'])
+        sensor = root.find(".//sensor[@name='simple_lidar']")
+        self.assertEqual(sensor.get('type'), 'ray')
+        self.assertEqual(sensor.find('plugin').get('filename'), 'libxgc2_simple_lidar_cpu.so')
+        self.assertEqual(sensor.findtext('plugin/robotNamespace'), 'ugv2')
+        self.assertEqual(float(sensor.findtext('update_rate')), 12)
+        self.assertEqual(float(sensor.findtext('ray/range/max')), 8)
+        for direction, count, degrees in [('horizontal', 90, 120), ('vertical', 8, 40)]:
+            scan = sensor.find('ray/scan/' + direction)
+            self.assertEqual(int(scan.findtext('samples')), count)
+            self.assertAlmostEqual(float(scan.findtext('max_angle')) - float(scan.findtext('min_angle')),
+                                   math.radians(degrees))
     def test_disabled_default_matches_checked_in_model_without_public_package(self):
         rendered = render_model()
         baseline = parse_xml(MODEL_SDF.read_text())
