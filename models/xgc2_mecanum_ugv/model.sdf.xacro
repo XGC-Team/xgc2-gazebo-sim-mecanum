@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <sdf version="1.6" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="chassis_robot_id" default=""/>
   <xacro:arg name="robot_namespace" default="ugv1"/>
   <xacro:arg name="drive_model" default="high_fidelity"/>
   <xacro:arg name="plugin_filename" default="libgazebo_sim_mecanum_contract.so"/>
@@ -137,6 +138,7 @@
     </xacro:if>
 
     <plugin name="mecanum_contract" filename="$(arg plugin_filename)">
+      <chassisRobotId>$(arg chassis_robot_id)</chassisRobotId>
       <robotNamespace>$(arg robot_namespace)</robotNamespace>
       <driveModel>$(arg drive_model)</driveModel>
       <commandTopic>cmd_vel</commandTopic><poseTopic>simulation/ground_truth/pose</poseTopic><twistTopic>simulation/ground_truth/twist</twistTopic>

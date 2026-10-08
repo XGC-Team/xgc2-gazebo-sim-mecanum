@@ -7,7 +7,7 @@ cd "${REPO_ROOT}"
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/xgc2-gazebo-sim-mecanum-pycache}"
 
 bash -n .xgc2/scripts/*.sh
-python3 -m py_compile scripts/check_model_ready.py scripts/model_lifecycle.py \
+python3 -m py_compile scripts/check_model_ready.py \
   test/ideal_drive_e2e.py test/high_fidelity_drive_e2e.py \
   .xgc2/scripts/xgc2_artifact_manifest.py
 
@@ -31,7 +31,6 @@ required=(
   models/xgc2_mecanum_ugv/model.sdf
   models/xgc2_mecanum_ugv/model.sdf.xacro
   scripts/check_model_ready.py
-  scripts/model_lifecycle.py
   src/mecanum_contract_plugin.cpp
   test/ideal_drive.test
   test/ideal_drive_e2e.py
@@ -52,7 +51,8 @@ if grep -Eq '<arg name="bond"|(^|[[:space:]])-b([[:space:]]|")' launch/spawn.lau
   echo "Spawn lifecycle must have one supervisor-owned delete path" >&2
   exit 1
 fi
-grep -q 'type="model_lifecycle.py"' launch/spawn.launch
+grep -q 'type="spawn_robot_model"' launch/spawn.launch
+grep -q 'simulation_service_ref_json' launch/spawn.launch
 grep -q '$(dirname)/../models/xgc2_mecanum_ugv/model.sdf.xacro' launch/spawn.launch
 if grep -q '$(find gazebo_sim_mecanum)' launch/spawn.launch; then
   echo "Spawn launch must resolve its owned model relative to its canonical file" >&2

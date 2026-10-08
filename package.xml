@@ -8,6 +8,11 @@
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>catkin</buildtool_depend>
+  <depend>xgc2_gazebo_scene</depend>
+  <exec_depend>xgc2_scene_runtime</exec_depend>
+  <exec_depend>gazebo_sim_worlds</exec_depend>
+  <build_depend>libxgc2-xrpc-dev</build_depend>
+  <exec_depend>libxgc2-xrpc1</exec_depend>
 
   <depend>gazebo_dev</depend>
   <depend>gazebo_ros</depend>

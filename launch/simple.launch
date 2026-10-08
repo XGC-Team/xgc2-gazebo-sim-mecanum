@@ -1,5 +1,7 @@
 <?xml version="1.0"?>
 <launch>
+  <arg name="simulation_service_ref_json"/>
+  <arg name="target_id"/>
   <arg name="ns" default="ugv1"/>
   <arg name="model_name" default="$(arg ns)"/>
   <arg name="drive_model" default="high_fidelity"/>
@@ -12,7 +14,7 @@
   <arg name="simple_lidar_vfov_deg" default="57.29577951308232"/>
   <arg name="simple_lidar_hres" default="360"/>
   <arg name="simple_lidar_vres" default="16"/>
-  <arg name="world_name" default="$(find gazebo_sim_worlds)/worlds/empty/empty.world"/>
+  <arg name="world_name"/>
   <arg name="gui" default="true"/>
   <arg name="paused" default="false"/>
   <arg name="x" default="0.0"/>
@@ -31,16 +33,16 @@
   <arg name="battery_voltage" default="12.348"/>
   <arg name="power_voltage_publish_rate" default="1"/>
 
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(arg world_name)"/>
-    <arg name="paused" value="$(arg paused)"/>
-    <arg name="use_sim_time" value="true"/>
-    <arg name="gui" value="$(arg gui)"/>
-    <arg name="headless" value="false"/>
-    <arg name="debug" value="false"/>
-  </include>
+  <include file="$(find gazebo_sim_worlds)/launch/native_world.launch">
+      <arg name="world" value="$(arg world_name)"/>
+      <arg name="paused" value="$(arg paused)"/>
+      <arg name="gui" value="$(arg gui)"/>
+      <arg name="ros_data" value="true"/>
+    </include>
 
   <include file="$(dirname)/spawn.launch">
+    <arg name="simulation_service_ref_json" value="$(arg simulation_service_ref_json)"/>
+    <arg name="target_id" value="$(arg target_id)"/>
     <arg name="ns" value="$(arg ns)"/>
     <arg name="model_name" value="$(arg model_name)"/>
     <arg name="drive_model" value="$(arg drive_model)"/>

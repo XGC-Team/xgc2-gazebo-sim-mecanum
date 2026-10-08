@@ -26,9 +26,10 @@ With the default namespace `ugv1`:
 | `/ugv1/imu` | `sensor_msgs/Imu` | 20 Hz | orientation and angular rate. Matches Wheeltec MCU `/imu` and swarm-ros-bridge send `max_freq=20` (`:3001`). |
 | `/ugv1/PowerVoltage` | `std_msgs/Float32` | 1 Hz | fixed chassis voltage in volts; default 12.348 V (88% of Core `mecanum_ugv.3s_lipo` 10.5–12.6 V). Same name/type as the Wheeltec MCU topic. Rate matches swarm-ros-bridge send `max_freq=1` (`:3002`), not the onboard MCU ~1.67 Hz. Simulation does not run swarm-ros-bridge. |
 | `/ugv1/joint_states` | `sensor_msgs/JointState` | 20 Hz | renderer-only wheel angles reconstructed from body motion |
+| `/ugv1/simulation/drive/joints` | `sensor_msgs/JointState` | state rate, high_fidelity only | actual native wheel positions, velocities and efforts |
 
-Internal physical wheel rates, effort, slip, and controller state are not
-published. The public wheel angles are reconstructed from actual body motion,
+Actual native wheel state is separate from the renderer topic. The public
+renderer wheel angles are reconstructed from actual body motion,
 so RViz and Lichtblick use the same animation path for simulation and physical
 robots.
 
@@ -54,13 +55,19 @@ and coupled-command effects instead of forcing exact command tracking.
 
 ```bash
 source /opt/ros/noetic/setup.bash
-roslaunch gazebo_sim_mecanum simple.launch gui:=true drive_model:=high_fidelity
+roslaunch gazebo_sim_mecanum simple.launch gui:=false drive_model:=high_fidelity \
+  world_name:="$SIMULATION_PREPARED_WORLD" \
+  simulation_service_ref_json:="$SIMULATION_SERVICE_REF_JSON" target_id:="$SIMULATION_TARGET_ID"
 rostopic pub -r 20 /ugv1/cmd_vel geometry_msgs/Twist \
   '{linear: {x: 0.4, y: 0.2}, angular: {z: 0.3}}'
 ```
 
-For an existing Gazebo server, use `spawn.launch`. Multiple robots require a
-unique `ns` and `model_name` for each instance. Set `drive_model:=ideal` per
+The caller supplies a prepared absolute world, explicit native simulation-v1
+ServiceRef and target. Its fixed chassis roster must grant each model_name.
+Gazebo starts and stops through the explicit native_world launch workflow;
+the running native provider manages entities and HOLD. For an existing native
+world, use `spawn.launch` with the same explicit reference and target. Multiple
+robots require unique ns and public model_name. Set `drive_model:=ideal` per
 robot when a lightweight model is preferred. Packaged process definitions pin
 the installed launch file, model meshes, and Gazebo plugin to their canonical
 absolute paths. Source development stages a separate immutable release pointing
@@ -68,7 +75,7 @@ directly at the checked-out `spawn.launch`, mesh directory, and freshly built
 plugin; it never falls back to a stale or missing `/opt` package.
 
 The optional GPU simple lidar is off by default. Enable it with
-`roslaunch gazebo_sim_mecanum simple.launch ns:=ugv1 enable_simple_lidar:=true`.
+the same explicit launch bindings with `enable_simple_lidar:=true`.
 Its default mount pose in `base_footprint` is `0 0 0.28 0 0 0`; override it with
 `simple_lidar_pose` when needed. The points topic follows the robot namespace,
 for example `/ugv1/simple_lidar/points`.
@@ -96,7 +103,9 @@ In an isolated ROS Noetic/Gazebo 11 catkin workspace containing this package and
 ```bash
 catkin_make -DCMAKE_BUILD_TYPE=Release
 source devel/setup.bash
-rostest gazebo_sim_mecanum high_fidelity_drive.test
+rostest gazebo_sim_mecanum high_fidelity_drive.test \
+  world_name:="$SIMULATION_PREPARED_WORLD" \
+  simulation_service_ref_json:="$SIMULATION_SERVICE_REF_JSON" target_id:="$SIMULATION_TARGET_ID"
 ```
 
 Six runtime tests cover flat forward/sideways/yaw response, physical wheels,
@@ -104,5 +113,12 @@ gravity/wall collision, airborne and roof-supported inverted zero traction,
 recontact, tilted partial support, and repeated HOLD/release plus model
 spawn/delete. They use disposable simulation models only. HOLD checks allow
 1.5 simulation seconds for physical braking; acknowledgment does not claim
-instantaneous removal of inertia. The deterministic Gate suite separately
-checks serialized target writes and callback lifetime with sanitizers.
+instantaneous removal of inertia. These full vehicle tests require a prepared
+isolated world roster including ugv1 and ugv2 and have not been rerun for this
+native migration. The five-model native fixture verified real admission/output,
+blocked-dispatcher backlog rejection and concurrent Delete. Its SIGINT shutdown
+failed; evidence and remaining gates are in [native validation](docs/native-validation.md).
+
+Python control consumers require an explicitly selected interpreter >=3.10 with
+the formal XRPC wheel and xgc2_scene_runtime. CMake checks PYTHON_EXECUTABLE before
+catkin rewrites installed script shebangs. The system Python is not replaced.

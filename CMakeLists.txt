@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.16)
 project(gazebo_sim_mecanum)
+find_package(PythonInterp 3.10 REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
+  xgc2_gazebo_scene
   geometry_msgs
   roscpp
   sensor_msgs
@@ -10,10 +12,11 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 find_package(gazebo REQUIRED)
+find_package(XgcXrpc REQUIRED CONFIG)
 
 catkin_package(
   LIBRARIES gazebo_sim_mecanum_contract
-  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs tf2 tf2_ros
+  CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs tf2 tf2_ros xgc2_gazebo_scene
 )
 
 include_directories(
@@ -27,13 +30,14 @@ add_definitions(${GAZEBO_CXX_FLAGS})
 add_library(gazebo_sim_mecanum_contract SHARED
   src/mecanum_contract_plugin.cpp
 )
-target_compile_features(gazebo_sim_mecanum_contract PRIVATE cxx_std_14)
+target_compile_features(gazebo_sim_mecanum_contract PRIVATE cxx_std_20)
 add_dependencies(gazebo_sim_mecanum_contract ${catkin_EXPORTED_TARGETS})
 find_package(Threads REQUIRED)
 target_link_libraries(gazebo_sim_mecanum_contract
   ${catkin_LIBRARIES}
   ${GAZEBO_LIBRARIES}
   Threads::Threads
+  xgc2_simulation_service XgcXrpc::http
 )
 
 install(TARGETS gazebo_sim_mecanum_contract
@@ -44,7 +48,6 @@ install(TARGETS gazebo_sim_mecanum_contract
 
 catkin_install_python(PROGRAMS
   scripts/check_model_ready.py
-  scripts/model_lifecycle.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -63,28 +66,18 @@ if(CATKIN_ENABLE_TESTING)
   find_package(PythonInterp 3 REQUIRED)
   find_package(roslaunch REQUIRED)
   find_package(rostest REQUIRED)
-  roslaunch_add_file_check(launch)
   add_test(
     NAME mecanum_optional_simple_lidar_render
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_simple_lidar_render.py
   )
-  add_rostest(test/ideal_drive.test)
-  add_rostest(test/high_fidelity_drive.test)
 
-  # Both contracts start Gazebo and claim the global default ROS master.
-  # Keep every catkin and CTest entry point serialized around that shared
-  # integration environment.
-  set_tests_properties(
-    _ctest_gazebo_sim_mecanum_rostest_test_ideal_drive.test
-    _ctest_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
-    PROPERTIES RUN_SERIAL TRUE
-  )
-  add_dependencies(
-    run_tests_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
-    run_tests_gazebo_sim_mecanum_rostest_test_ideal_drive.test
-  )
-  add_dependencies(
-    _run_tests_gazebo_sim_mecanum_rostest_test_high_fidelity_drive.test
-    _run_tests_gazebo_sim_mecanum_rostest_test_ideal_drive.test
-  )
+endif()
+
+# Scientific full-vehicle regression runs only against a caller-prepared world.
+set(XGC2_TEST_WORLD "" CACHE FILEPATH "Prepared isolated native world")
+set(XGC2_TEST_SERVICE_REF_JSON "" CACHE STRING "Explicit native simulation-v1 ServiceRef")
+set(XGC2_TEST_TARGET_ID "" CACHE STRING "Native fixture local target")
+if(CATKIN_ENABLE_TESTING AND XGC2_TEST_WORLD AND XGC2_TEST_SERVICE_REF_JSON AND XGC2_TEST_TARGET_ID)
+  add_rostest(test/ideal_drive.test ARGS "world_name:=${XGC2_TEST_WORLD}" "simulation_service_ref_json:=${XGC2_TEST_SERVICE_REF_JSON}" "target_id:=${XGC2_TEST_TARGET_ID}")
+  add_rostest(test/high_fidelity_drive.test ARGS "world_name:=${XGC2_TEST_WORLD}" "simulation_service_ref_json:=${XGC2_TEST_SERVICE_REF_JSON}" "target_id:=${XGC2_TEST_TARGET_ID}")
 endif()

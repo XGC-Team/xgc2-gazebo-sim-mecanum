@@ -1,28 +1,31 @@
-# HOLD execution and lifetime
+# Native HOLD and lifetime
 
-Command receipt and the actual Gazebo actuator/velocity update execute within
-the same Gate transaction used by HOLD transitions. A HOLD acknowledgement
-therefore follows previously admitted command writes and the zero-target
-callback. Subsequent updates use zero targets while held. Physical wheel
-braking, inertia and contact response are distinct from instantaneous stopping.
-Releasing HOLD does not restore the old command cache.
+The ModelPlugin binds explicit chassisRobotId to its native world. The ID equals
+the public simulation-v1 entity ID and must be declared in the prepared world's
+at-most-16 chassis_robot_ids grant. ROS namespace/private model name authorize
+no control. Ready() follows complete successful native setup. Creation fails
+for absent authority, identity or readiness.
 
-The Gate is registered before the ROS command spinner starts. Shutdown first
-drains Gazebo updates and ROS command callbacks, then unregisters/drains UDP
-callbacks, and only then destroys the Gate and its owner. Lock order is registry,
-Gate, then command state. Zero callbacks must not re-enter Gate or registry APIs.
+One world provider/listener owns /v1/chassis/hold. Read the applied revision, then
+supply expected_revision and {robot_id, held} changes. Successful applied HOLD
+includes native zero-sink completion. Per-robot UDP Gate/Hub and listener threads
+are removed.
 
-## Simulator routing
+ROS command admission, command state and actual native wheel/velocity output
+share ChassisBinding::with_command. It tries the fixed world domain lock once;
+contention skips that sample. Domain lock precedes the command mutex. HOLD clears
+state and all native wheel efforts; ideal mode also applies zero rigid-body
+velocity. Release keeps zero cached targets until a fresh command. Physical
+inertia/contact response is distinct from zero actuator output.
 
-Each simulated robot exclusively binds a loopback UDP port computed from its
-UTF-8 robot ID: `20000 + FNV1a32(id) % 20000`. FNV-1a uses offset basis
-2166136261 and prime 16777619, with 32-bit unsigned overflow. Core uses the same
-mapping for simulation resources; physical firmware retains port 19520.
-IDs must be nonempty and shorter than 32 bytes. The datagram still contains the
-exact robot ID, and an endpoint rejects frames addressed to another ID.
+Models use one fixed shared world ROS dispatcher with no model spinner thread.
+Owner-specific queue entries capture an epoch. HOLD/release/reset invalidate it
+without native allocation; stale entries consume the underlying SubscriptionQueue
+but skip their action. Admission rechecks the epoch inside the world transaction,
+so dispatch delayed until after release cannot revive pre-HOLD commands.
 
-This permits multiple processes without `SO_REUSEADDR` packet competition.
-An occupied port (including a hash collision or duplicate robot ID) fails
-registration explicitly; choose a distinct ID instead of sharing an endpoint.
-Sender and simulator updates must be delivered together. This local simulator
-control protocol is not an authenticated remote control interface.
+Native deletion zeroes/retires before Gazebo link Fini. Teardown disconnects
+updates, closes subscriptions, drains admitted callbacks and unregisters bindings.
+Binding destruction never touches finalized joints. Gazebo start/stop remains
+explicit process management; the provider controls the running domain only.
+See native-validation.md for evidence and the unresolved process shutdown gate.

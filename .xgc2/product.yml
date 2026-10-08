@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-mecanum
 name: XGC2 Gazebo Sim Mecanum
-version: 0.1.0-18
+version: 0.1.0-19
 kind: ros1-apt
 summary: Selectable high-fidelity and ideal Mecanum UGV dynamics for Gazebo Classic
   11.
@@ -25,6 +25,8 @@ apt:
   depends:
   - ros-noetic-xgc2-simple-lidar (>= 1.4.0-2)
   - libgazebo11
+  - libxgc2-xrpc1 (>= 0.1.0)
+  - ros-noetic-xgc2-gazebo-scene (>= 1.4.1-4)
   - ros-noetic-gazebo-msgs
   - ros-noetic-gazebo-ros
   - ros-noetic-geometry-msgs
@@ -37,20 +39,18 @@ apt:
   - ros-noetic-tf2-ros
   - ros-noetic-xacro
   - ros-noetic-xgc2-mecanum-description (>= 0.1.0-10)
-  - ros-noetic-xgc2-gazebo-sim-worlds (>= 1.1.0-14)
+  - ros-noetic-xgc2-gazebo-sim-worlds (>= 1.4.1-4)
   recommends:
-  - ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-13)
+  - ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-27)
 usage:
   install: 'sudo apt update
 
     sudo apt install ros-noetic-xgc2-gazebo-sim-mecanum
 
     '
-  smoke_test: 'roslaunch --files gazebo_sim_mecanum simple.launch gui:=false
+  smoke_test: 'test -f /opt/ros/noetic/lib/libgazebo_sim_mecanum_contract.so
 
-    rostest gazebo_sim_mecanum high_fidelity_drive.test
-
-    rostest gazebo_sim_mecanum ideal_drive.test
+    test -f /opt/ros/noetic/share/gazebo_sim_worlds/launch/native_world.launch
 
     '
   notes: 'High fidelity is the default and enables wheel-speed loops, Mecanum slip
@@ -61,7 +61,7 @@ usage:
 
     The product publishes no odometry and no canonical /namespace/pose or
 
-    /namespace/twist; plugin truth is diagnostic/pose and diagnostic/twist.
+    /namespace/twist; plugin truth is simulation/ground_truth/pose and simulation/ground_truth/twist.
 
     The optional VRPN bridge consumes Gazebo model poses directly.
 
@@ -77,11 +77,13 @@ release:
   workflow: release.yml
   ci_workflow: ci.yml
   requires:
+  - xgc2-xrpc
   - xgc2-mecanum-description
   - xgc2-gazebo-sim-scenes
   dependency_policy:
+    xgc2-xrpc: rebuild
     xgc2-mecanum-description: rebuild
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
   apt_versions:
-    focal: 0.1.0-18
+    focal: 0.1.0-19

@@ -1,14 +1,16 @@
 <?xml version="1.0"?>
 <launch>
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="paused" value="false"/>
-    <arg name="use_sim_time" value="true"/>
-    <arg name="gui" value="false"/>
-    <arg name="headless" value="false"/>
-    <arg name="debug" value="false"/>
-  </include>
+  <arg name="world_name"/>
+  <arg name="simulation_service_ref_json"/>
+  <arg name="target_id"/>
+  <include file="$(find gazebo_sim_worlds)/launch/native_world.launch">
+      <arg name="world" value="$(arg world_name)"/>
+      <arg name="paused" value="false"/>
+      <arg name="gui" value="false"/>
+      <arg name="ros_data" value="true"/>
+    </include>
 
-  <include file="$(find gazebo_sim_mecanum)/launch/spawn.launch">
+  <include file="$(find gazebo_sim_mecanum)/launch/spawn.launch"><arg name="simulation_service_ref_json" value="$(arg simulation_service_ref_json)"/><arg name="target_id" value="$(arg target_id)"/>
     <arg name="ns" value="ugv1"/>
     <arg name="model_name" value="ugv1"/>
     <arg name="drive_model" value="ideal"/>
@@ -17,5 +19,5 @@
   </include>
 
   <test test-name="ideal_drive_contract" pkg="gazebo_sim_mecanum"
-        type="ideal_drive_e2e.py" time-limit="60"/>
+        type="ideal_drive_e2e.py" time-limit="60"><param name="simulation_service_ref_json" value="$(arg simulation_service_ref_json)"/><param name="target_id" value="$(arg target_id)"/></test>
 </launch>

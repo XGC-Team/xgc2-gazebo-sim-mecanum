@@ -27,7 +27,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
-#include "xgc_chassis_hold/udp.hpp"
+#include <xgc2_gazebo_scene/chassis_hold_bridge.hpp>
+#include <xgc2_gazebo_scene/chassis_ros_callbacks.hpp>
 
 namespace gazebo_sim_mecanum {
 namespace {
@@ -86,19 +87,7 @@ bool SdfDeclaresExactRelativeTopic(const sdf::ElementPtr& sdf, const char* eleme
 // wheel-speed loops and converts wheel/ground slip into bounded Mecanum forces.
 class MecanumContractPlugin final : public gazebo::ModelPlugin {
  private:
-  // Gazebo disconnects future event delivery without joining a callback that
-  // was already selected. The callback owns this gate and never dereferences
-  // the plugin outside its lock, so Shutdown can drain that final callback.
-  struct UpdateGate {
-    explicit UpdateGate(MecanumContractPlugin* initial_owner) : owner(initial_owner) {}
-
-    std::mutex mutex;
-    MecanumContractPlugin* owner;
-  };
-
  public:
-  MecanumContractPlugin() : update_gate_(std::make_shared<UpdateGate>(this)) {}
-
   ~MecanumContractPlugin() override { Shutdown(); }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override {
@@ -214,6 +203,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     max_left_velocity_ = std::abs(max_left_velocity_);
     max_yaw_velocity_ = std::abs(max_yaw_velocity_);
 
+    native_joints_publisher_ = ros_node_->advertise<sensor_msgs::JointState>("simulation/drive/joints", 1, false);
     traction_publisher_ = ros_node_->advertise<std_msgs::Float64MultiArray>("simulation/traction", 1, false);
     pose_publisher_ = ros_node_->advertise<geometry_msgs::PoseStamped>(kSimulationGroundTruthPoseTopic, 10, false);
     twist_publisher_ = ros_node_->advertise<geometry_msgs::TwistStamped>(kSimulationGroundTruthTwistTopic, 10, false);
@@ -221,17 +211,13 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
     power_voltage_publisher_ =
         ros_node_->advertise<std_msgs::Float32>(power_voltage_topic, 10, false);
-    hold_gate_.reset(new xgc_chassis_hold::Gate(xgc_chassis_hold::lastPath(robot_namespace)));
-    hold_gate_->setZeroThunk(&MecanumContractPlugin::HoldZeroThunk, this);
-    xgc_chassis_hold::Hub::instance().add(hold_gate_.get());
+    hold_gate_.reset(new xgc2_gazebo_scene::ChassisBinding(
+        model_->GetWorld(), sdf->Get<std::string>("chassisRobotId"), &MecanumContractPlugin::HoldZeroThunk, this));
 
-    ros::SubscribeOptions command_options = ros::SubscribeOptions::create<geometry_msgs::Twist>(
-        command_topic, 1000,
-        boost::bind(&MecanumContractPlugin::CommandCallback, this, boost::placeholders::_1), ros::VoidPtr(),
-        &command_queue_);
-    command_subscriber_ = ros_node_->subscribe(command_options);
-    command_spinner_.reset(new ros::AsyncSpinner(1, &command_queue_));
-    command_spinner_->start();
+    callbacks_.reset(new xgc2_gazebo_scene::ChassisRosCallbacks(model_->GetWorld()));
+    ros_node_->setCallbackQueue(callbacks_->queue());
+    command_subscriber_ = ros_node_->subscribe<geometry_msgs::Twist>(command_topic, 16,
+        callbacks_->wrap([this](const geometry_msgs::Twist::ConstPtr& message) { CommandCallback(message); }));
 
     tf_child_frame_ = TrimSlashes(robot_namespace);
     if (tf_child_frame_.empty()) {
@@ -239,14 +225,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     }
     tf_child_frame_ += "/" + base_frame_;
 
-    const auto update_gate = update_gate_;
-    update_connection_ =
-        gazebo::event::Events::ConnectWorldUpdateBegin([update_gate](const gazebo::common::UpdateInfo& info) {
-          std::lock_guard<std::mutex> lock(update_gate->mutex);
-          if (update_gate->owner) {
-            update_gate->owner->OnUpdate(info);
-          }
-        });
+    update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
+        callbacks_->wrap([this](const gazebo::common::UpdateInfo& info) { OnUpdate(info); }));
 
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
                                                     << ros_node_->getNamespace() << "' drive_model='"
@@ -254,16 +234,22 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
                                                     << "' ground truth pose='" << kSimulationGroundTruthPoseTopic
                                                     << "' twist='" << kSimulationGroundTruthTwistTopic
                                                     << "' uses Gazebo-owned integration");
+    callbacks_->invalidate();
+    hold_gate_->Ready();
   }
 
   void Reset() override {
-    next_state_publish_time_ = 0.0;
-    next_visual_publish_time_ = 0.0;
-    next_imu_publish_time_ = 0.0;
-    next_power_voltage_publish_time_ = 0.0;
-    last_visual_update_time_ = 0.0;
-    last_update_time_ = 0.0;
-    wheel_positions_.assign(4, 0.0);
+    if (!hold_gate_) return;
+    hold_gate_->with_command([this](bool) {
+      HoldZero();
+      next_state_publish_time_ = 0.0;
+      next_visual_publish_time_ = 0.0;
+      next_imu_publish_time_ = 0.0;
+      next_power_voltage_publish_time_ = 0.0;
+      last_visual_update_time_ = 0.0;
+      last_update_time_ = 0.0;
+      wheel_positions_.assign(4, 0.0);
+    });
   }
 
  private:
@@ -273,27 +259,16 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     }
 
     update_connection_.reset();
-    const auto update_gate = update_gate_;
-    if (update_gate) {
-      std::lock_guard<std::mutex> lock(update_gate->mutex);
-      update_gate->owner = nullptr;
-    }
-
-    command_queue_.disable();
     command_subscriber_.shutdown();
-    if (command_spinner_) {
-      command_spinner_->stop();
-      command_spinner_.reset();
-    }
-    command_queue_.clear();
+    if (callbacks_) callbacks_->drain();
 
-    // All ROS/Gazebo command producers are drained before releasing the Gate.
-    // Unregister also waits for any in-flight UDP zero callback.
+    // All ROS/Gazebo command producers are drained before releasing the binding.
+    // Unregister also waits for any in-flight world zero callback.
     if (hold_gate_) {
-      xgc_chassis_hold::Hub::instance().remove(hold_gate_.get());
       hold_gate_.reset();
     }
 
+    native_joints_publisher_.shutdown();
     joint_states_publisher_.shutdown();
     power_voltage_publisher_.shutdown();
     imu_publisher_.shutdown();
@@ -306,7 +281,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     }
     body_link_.reset();
     model_.reset();
-    update_gate_.reset();
   }
 
   static void HoldZeroThunk(void* self) {
@@ -314,21 +288,28 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
   void HoldZero() {
+    if (callbacks_) callbacks_->invalidate();
     std::lock_guard<std::mutex> lock(command_mutex_);
     front_velocity_command_ = 0.0;
     left_velocity_command_ = 0.0;
     yaw_velocity_command_ = 0.0;
+    for (const auto& joint : wheel_joints_) if (joint) joint->SetForce(0, 0.0);
+    if (!high_fidelity_) {
+      model_->SetLinearVel(ignition::math::Vector3d::Zero);
+      model_->SetAngularVel(ignition::math::Vector3d::Zero);
+    }
   }
 
   void CommandCallback(const geometry_msgs::Twist::ConstPtr& command) {
     if (shutting_down_.load(std::memory_order_acquire)) {
       return;
     }
-    hold_gate_->withCommand([&](bool held) {
+    hold_gate_->with_command([&](bool held) {
       if (held) {
         HoldZero();
         return;
       }
+      if (!callbacks_->current()) return;
       std::lock_guard<std::mutex> lock(command_mutex_);
       front_velocity_command_ = linear_scale_ * ClampFinite(command->linear.x, max_front_velocity_);
       left_velocity_command_ = linear_scale_ * ClampFinite(command->linear.y, max_left_velocity_);
@@ -340,6 +321,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (shutting_down_.load(std::memory_order_acquire) || !ros_node_ || !ros::ok()) {
       return;
     }
+    hold_gate_->with_command([&](bool held) {
     const double now = info.simTime.Double();
     double dt = 0.0;
     if (last_update_time_ > 0.0 && now >= last_update_time_) {
@@ -348,7 +330,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     last_update_time_ = now;
     // Serialize the actuator write, not only the earlier command receipt,
     // against HOLD. Zero wheel targets can still generate braking forces.
-    hold_gate_->withCommand([&](bool held) {
       if (held) {
         HoldZero();
       }
@@ -357,7 +338,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       } else {
         ApplyPlanarVelocity();
       }
-    });
     if (next_state_publish_time_ == 0.0 || now + 1.0e-9 >= next_state_publish_time_) {
       PublishState(now);
       AdvanceDeadline(now, 1.0 / state_publish_rate_, &next_state_publish_time_);
@@ -374,6 +354,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       PublishPowerVoltage();
       AdvanceDeadline(now, 1.0 / power_voltage_publish_rate_, &next_power_voltage_publish_time_);
     }
+    });
   }
 
   void ApplyPlanarVelocity() {
@@ -610,6 +591,18 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
                         "lower_right_wheel_joint"};
     joint_state.position = wheel_positions_;
     joint_states_publisher_.publish(joint_state);
+    if (high_fidelity_) {
+      sensor_msgs::JointState measurement;
+      measurement.header.stamp = stamp;
+      measurement.header.frame_id = "native_wheel_joints";
+      for (const auto& joint : wheel_joints_) {
+        measurement.name.push_back(joint->GetName());
+        measurement.position.push_back(joint->Position(0));
+        measurement.velocity.push_back(joint->GetVelocity(0));
+        measurement.effort.push_back(joint->GetForce(0));
+      }
+      native_joints_publisher_.publish(measurement);
+    }
 
     geometry_msgs::TransformStamped transform;
     transform.header.stamp = stamp;
@@ -629,20 +622,19 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   gazebo::physics::LinkPtr body_link_;
   std::array<gazebo::physics::JointPtr, kWheelCount> wheel_joints_{};
   std::atomic<bool> shutting_down_{false};
-  std::shared_ptr<UpdateGate> update_gate_;
   gazebo::event::ConnectionPtr update_connection_;
   std::unique_ptr<ros::NodeHandle> ros_node_;
-  ros::CallbackQueue command_queue_;
-  std::unique_ptr<ros::AsyncSpinner> command_spinner_;
+  std::unique_ptr<xgc2_gazebo_scene::ChassisRosCallbacks> callbacks_;
   ros::Subscriber command_subscriber_;
   ros::Publisher pose_publisher_;
   ros::Publisher twist_publisher_;
   ros::Publisher imu_publisher_;
   ros::Publisher joint_states_publisher_;
+  ros::Publisher native_joints_publisher_;
   ros::Publisher power_voltage_publisher_;
   tf2_ros::TransformBroadcaster tf_broadcaster_;
   std::mutex command_mutex_;
-  std::unique_ptr<xgc_chassis_hold::Gate> hold_gate_;
+  std::unique_ptr<xgc2_gazebo_scene::ChassisBinding> hold_gate_;
   double front_velocity_command_{0.0};
   double left_velocity_command_{0.0};
   double yaw_velocity_command_{0.0};

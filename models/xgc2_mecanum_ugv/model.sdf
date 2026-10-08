@@ -470,6 +470,7 @@
       </axis>
     </joint>
     <plugin filename="libgazebo_sim_mecanum_contract.so" name="mecanum_contract">
+      <chassisRobotId>ugv1</chassisRobotId>
       <robotNamespace>ugv1</robotNamespace>
       <driveModel>high_fidelity</driveModel>
       <commandTopic>cmd_vel</commandTopic>

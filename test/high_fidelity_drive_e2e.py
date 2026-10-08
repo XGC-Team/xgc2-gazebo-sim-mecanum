@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import math
-import socket
-import struct
 import threading
 import time
 import unittest
@@ -9,7 +7,7 @@ import unittest
 import rospy
 import rostest
 from gazebo_msgs.msg import ModelState
-from gazebo_msgs.srv import DeleteModel, GetJointProperties, SetModelState, SpawnModel
+from native_simulation import NativeSimulation
 from geometry_msgs.msg import PoseStamped, Twist, TwistStamped
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float32, Float64MultiArray
@@ -23,25 +21,20 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         cls.pose = None
         cls.twists = []
         cls.joint_state = None
+        cls.native_joint_state = None
         cls.voltage = None
         cls.traction = []
         rospy.Subscriber("/ugv1/simulation/traction", Float64MultiArray, cls._traction_callback, queue_size=2000)
         rospy.Subscriber("/ugv1/simulation/ground_truth/pose", PoseStamped, cls._pose_callback, queue_size=1)
         rospy.Subscriber("/ugv1/simulation/ground_truth/twist", TwistStamped, cls._twist_callback, queue_size=500)
+        rospy.Subscriber("/ugv1/simulation/drive/joints", JointState, cls._native_joint_callback, queue_size=1)
         rospy.Subscriber("/ugv1/joint_states", JointState, cls._joint_callback, queue_size=1)
         rospy.Subscriber("/ugv1/PowerVoltage", Float32, cls._voltage_callback, queue_size=10)
         cls.command_pub = rospy.Publisher("/ugv1/cmd_vel", Twist, queue_size=1)
-        for service in (
-            "/gazebo/get_joint_properties",
-            "/gazebo/set_model_state",
-            "/gazebo/spawn_sdf_model",
-            "/gazebo/delete_model",
-        ):
-            rospy.wait_for_service(service, timeout=20.0)
-        cls.get_joint = rospy.ServiceProxy("/gazebo/get_joint_properties", GetJointProperties)
-        cls.set_model = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
-        cls.spawn_model = rospy.ServiceProxy("/gazebo/spawn_sdf_model", SpawnModel)
-        cls.delete_model = rospy.ServiceProxy("/gazebo/delete_model", DeleteModel)
+        cls.native = NativeSimulation()
+        cls.set_model = cls.native.set_model
+        cls.spawn_model = cls.native.spawn_model
+        cls.delete_model = cls.native.delete_model
 
         deadline = time.monotonic() + 20.0
         while time.monotonic() < deadline and not rospy.is_shutdown():
@@ -72,6 +65,10 @@ class HighFidelityDriveContractTest(unittest.TestCase):
     def _joint_callback(cls, message):
         with cls.lock:
             cls.joint_state = message
+
+    @classmethod
+    def _native_joint_callback(cls, message):
+        with cls.lock: cls.native_joint_state = message
 
     @classmethod
     def _voltage_callback(cls, message):
@@ -164,20 +161,10 @@ class HighFidelityDriveContractTest(unittest.TestCase):
 
     def test_06_hold_and_repeated_model_lifetime(self):
         def hold(robot, value, sequence, deletion=None):
-            digest = 2166136261
-            for byte in robot.encode():
-                digest = ((digest ^ byte) * 16777619) & 0xffffffff
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
-                client.settimeout(2)
-                client.sendto(struct.pack("<IBBHI32s", 0x58474348, 1, value, 0,
-                                          sequence, robot.encode()),
-                              ("127.0.0.1", 20000 + digest % 20000))
-                ack, _ = client.recvfrom(1024)
-            self.assertEqual(len(ack), 12)
-            # Registry removal precedes socket close. A request racing that
-            # interval is explicitly rejected, rather than calling a dead Gate.
-            status = 1 if deletion is not None and deletion.is_set() and ack[6] == 1 else 0
-            self.assertEqual(ack, struct.pack("<IBBBBI", 0x58474348, 1, value, status, 0, sequence))
+            try:
+                self.native.hold(robot, bool(value))
+            except RuntimeError:
+                if deletion is None or not deletion.is_set(): raise
 
         source = rospy.get_param("/ugv1/gazebo_model_sdf").replace("ugv1", "ugv2")
         pose = ModelState().pose
@@ -207,7 +194,7 @@ class HighFidelityDriveContractTest(unittest.TestCase):
                     try:
                         second_command.publish(moving)
                         hold("ugv2", True, 40 + cycle, deletion)
-                    except (socket.timeout, ConnectionRefusedError):
+                    except RuntimeError:
                         pass  # The endpoint is absent during intentional deletion.
                     except Exception as error:
                         errors.append(error)
@@ -223,6 +210,10 @@ class HighFidelityDriveContractTest(unittest.TestCase):
             self.assertFalse(sender.is_alive())
             self.assertFalse(errors)
         self.publish_command(0, 0, 0, 0.3)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.native.close()
 
     def publish_command(self, x, y, yaw_rate, duration):
         message = Twist()
@@ -307,17 +298,11 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         self.assertLess(yaw.angular.z, 0.90)
         self.assertLess(math.hypot(yaw.linear.x, yaw.linear.y), 0.06)
 
-        rates = []
-        for name in (
-            "upper_left_wheel_joint",
-            "upper_right_wheel_joint",
-            "lower_left_wheel_joint",
-            "lower_right_wheel_joint",
-        ):
-            response = self.get_joint("ugv1::" + name)
-            self.assertTrue(response.success)
-            self.assertEqual(len(response.rate), 1)
-            rates.append(response.rate[0])
+        with self.lock:
+            message = self.native_joint_state
+            rates = [message.velocity[message.name.index(name)] for name in (
+                "upper_left_wheel_joint", "upper_right_wheel_joint",
+                "lower_left_wheel_joint", "lower_right_wheel_joint")]
         self.assertTrue(all(abs(rate) > 1.0 for rate in rates))
         self.assertTrue(all(rate < 0.0 for rate in rates))
 
@@ -334,7 +319,7 @@ class HighFidelityDriveContractTest(unittest.TestCase):
         wall_name = "mecanum_contract_test_wall"
         try:
             self.delete_model(wall_name)
-        except rospy.ServiceException:
+        except Exception:
             pass
         wall = """<sdf version='1.6'><model name='mecanum_contract_test_wall'><static>true</static>
           <link name='wall'><pose>0.60 0 0.15 0 0 0</pose>
