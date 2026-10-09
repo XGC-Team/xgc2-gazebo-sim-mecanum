@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
 INSTALL_CHECK="${INSTALL_CHECK:-true}"
@@ -29,14 +29,19 @@ docker run --rm \
   -v "${OUTPUT_DIR}:/workspace/out" \
   "${DOCKER_IMAGE}" bash -lc '
     set -euo pipefail
-    echo "deb [trusted=yes arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg arch=$(dpkg --print-architecture)] https://xgc2.apt.xiaokang.ink focal main" \
       >/etc/apt/sources.list.d/xgc2.list
     if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
-      sed "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" \
-        /etc/apt/sources.list.d/xgc2.list >/etc/apt/sources.list.d/00-xgc2-release-train.list
+      sed -i "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g" /etc/apt/sources.list.d/xgc2.list
     fi
-    apt-get update
+    export CC=/usr/bin/clang-10 CXX=/usr/bin/clang++-10
+    apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts=""
     apt-get install -y --no-install-recommends \
+      libxgc2-xrpc-dev libxgc2-robotics-interfaces-dev \
+      ros-noetic-xgc2-gazebo-scene \
       ros-noetic-xgc2-mecanum-description \
       ros-noetic-xgc2-gazebo-sim-worlds \
       ros-noetic-xgc2-simple-lidar
