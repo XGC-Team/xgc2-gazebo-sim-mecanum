@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(gazebo_sim_mecanum)
-find_package(PythonInterp 3.10 REQUIRED)
+find_package(PythonInterp 3 REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   xgc2_gazebo_scene
