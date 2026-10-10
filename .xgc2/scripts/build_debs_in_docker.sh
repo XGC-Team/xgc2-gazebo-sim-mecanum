@@ -53,7 +53,7 @@ docker run --rm \
     source /opt/ros/noetic/setup.bash
     python3 /workspace/repo/test/test_simple_lidar_render.py
     catkin_make -DCMAKE_BUILD_TYPE=Release
-    LIBGL_ALWAYS_SOFTWARE=1 catkin_make run_tests_gazebo_sim_mecanum
+    LIBGL_ALWAYS_SOFTWARE=1 catkin_make test
     catkin_test_results
     DESTDIR=/workspace/work/install-root catkin_make install \
       -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic -DCATKIN_ENABLE_TESTING=OFF
