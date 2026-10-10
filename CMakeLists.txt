@@ -37,7 +37,7 @@ target_link_libraries(gazebo_sim_mecanum_contract
   ${catkin_LIBRARIES}
   ${GAZEBO_LIBRARIES}
   Threads::Threads
-  xgc2_simulation_service XgcXrpc::http
+  XgcXrpc::http
 )
 
 install(TARGETS gazebo_sim_mecanum_contract

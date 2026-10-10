@@ -39,9 +39,9 @@ docker run --rm \
     fi
     export CC=/usr/bin/clang-10 CXX=/usr/bin/clang++-10
     apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts=""
-    apt-get install -y --no-install-recommends \
+    apt-get satisfy -y --no-install-recommends \
       libxgc2-xrpc-dev \
-      ros-noetic-xgc2-gazebo-scene \
+      "ros-noetic-xgc2-gazebo-scene (>= 1.4.1-25)" \
       ros-noetic-xgc2-mecanum-description \
       ros-noetic-xgc2-gazebo-sim-worlds \
       ros-noetic-xgc2-simple-lidar
