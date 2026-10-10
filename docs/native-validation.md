@@ -70,7 +70,7 @@ supervisor was introduced. Full wheel/contact/rollover/weak-network matrices,
 Focal controlled-toolchain runtime and deployment remain open.
 
 Packaging revisions are new unpublished source candidates. Models require
-libxgc2-xrpc1>=0.1.0, scene/world packages>=1.4.1-4, and their existing descriptions.
+libxgc2-xrpc1>=0.1.0, scene>=1.4.1-25 and the declared world package floor, and their existing descriptions.
 Formal Python SDK has no Debian package: Python consumers require an explicitly
 selected interpreter>=3.8 and the official wheel in that interpreter. The
 system Python is not replaced. The deployment release-set snapshot is not

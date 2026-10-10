@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-gazebo-sim-mecanum
 name: XGC2 Gazebo Sim Mecanum
-version: 0.1.0-19
+version: 0.1.0-20
 kind: ros1-apt
 summary: Selectable high-fidelity and ideal Mecanum UGV dynamics for Gazebo Classic
   11.
@@ -26,7 +26,7 @@ apt:
   - ros-noetic-xgc2-simple-lidar (>= 1.4.0-2)
   - libgazebo11
   - libxgc2-xrpc1 (>= 0.1.0)
-  - ros-noetic-xgc2-gazebo-scene (>= 1.4.1-4)
+  - ros-noetic-xgc2-gazebo-scene (>= 1.4.1-25)
   - ros-noetic-gazebo-msgs
   - ros-noetic-gazebo-ros
   - ros-noetic-geometry-msgs
@@ -86,4 +86,4 @@ release:
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
   apt_versions:
-    focal: 0.1.0-19
+    focal: 0.1.0-20

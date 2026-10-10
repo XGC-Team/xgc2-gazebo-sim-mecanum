@@ -40,7 +40,7 @@ docker run --rm \
     export CC=/usr/bin/clang-10 CXX=/usr/bin/clang++-10
     apt-get update -o Dir::Etc::sourcelist=sources.list.d/xgc2.list -o Dir::Etc::sourceparts=""
     apt-get install -y --no-install-recommends \
-      libxgc2-xrpc-dev libxgc2-robotics-interfaces-dev \
+      libxgc2-xrpc-dev \
       ros-noetic-xgc2-gazebo-scene \
       ros-noetic-xgc2-mecanum-description \
       ros-noetic-xgc2-gazebo-sim-worlds \

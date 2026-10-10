@@ -54,7 +54,7 @@ Section: misc
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: XGC2 <apt@example.com>
-Depends: libxgc2-xrpc1 (>= 0.1.0), ros-noetic-xgc2-gazebo-scene (>= 1.4.1-4), ros-noetic-xgc2-simple-lidar (>= 1.4.0-2), libgazebo11, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-roslaunch, ros-noetic-rospy, ros-noetic-rostest, ros-noetic-sensor-msgs, ros-noetic-tf2, ros-noetic-tf2-ros, ros-noetic-xacro, ros-noetic-xgc2-mecanum-description (>= 0.1.0-10), ros-noetic-xgc2-gazebo-sim-worlds (>= 1.4.1-4)
+Depends: libxgc2-xrpc1 (>= 0.1.0), ros-noetic-xgc2-gazebo-scene (>= 1.4.1-25), ros-noetic-xgc2-simple-lidar (>= 1.4.0-2), libgazebo11, ros-noetic-gazebo-msgs, ros-noetic-gazebo-ros, ros-noetic-geometry-msgs, ros-noetic-roscpp, ros-noetic-roslaunch, ros-noetic-rospy, ros-noetic-rostest, ros-noetic-sensor-msgs, ros-noetic-tf2, ros-noetic-tf2-ros, ros-noetic-xacro, ros-noetic-xgc2-mecanum-description (>= 0.1.0-10), ros-noetic-xgc2-gazebo-sim-worlds (>= 1.4.1-4)
 Recommends: ros-noetic-xgc2-gazebo-sim-vrpn-bridge (>= 1.1.0-27)
 Description: XGC2 selectable high-fidelity and ideal Mecanum UGV for Gazebo Classic
 EOF
