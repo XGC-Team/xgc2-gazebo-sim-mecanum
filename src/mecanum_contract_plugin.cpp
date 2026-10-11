@@ -27,8 +27,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
 
-#include <xgc2_gazebo_scene/chassis_hold_bridge.hpp>
-#include <xgc2_gazebo_scene/chassis_ros_callbacks.hpp>
+#include <xgc2_gazebo_scene/chassis_hold.hpp>
 
 namespace gazebo_sim_mecanum {
 namespace {
@@ -211,13 +210,12 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
     power_voltage_publisher_ =
         ros_node_->advertise<std_msgs::Float32>(power_voltage_topic, 10, false);
-    hold_gate_.reset(new xgc2_gazebo_scene::ChassisBinding(
-        model_->GetWorld(), sdf->Get<std::string>("chassisRobotId"), &MecanumContractPlugin::HoldZeroThunk, this));
-
-    callbacks_.reset(new xgc2_gazebo_scene::ChassisRosCallbacks(model_->GetWorld()));
-    ros_node_->setCallbackQueue(callbacks_->queue());
-    command_subscriber_ = ros_node_->subscribe<geometry_msgs::Twist>(command_topic, 16,
-        callbacks_->wrap([this](const geometry_msgs::Twist::ConstPtr& message) { CommandCallback(message); }));
+    hold_.reset(new xgc2_gazebo_scene::ChassisHold(
+        model_->GetWorld(), sdf->Get<std::string>("chassisRobotId"),
+        {[this] { HoldZero(); }, xgc2_gazebo_scene::BodySpeed(model_.get())}));
+    ros_node_->setCallbackQueue(hold_->CommandQueue());
+    command_subscriber_ =
+        ros_node_->subscribe<geometry_msgs::Twist>(command_topic, 16, &MecanumContractPlugin::CommandCallback, this);
 
     tf_child_frame_ = TrimSlashes(robot_namespace);
     if (tf_child_frame_.empty()) {
@@ -226,7 +224,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     tf_child_frame_ += "/" + base_frame_;
 
     update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
-        callbacks_->wrap([this](const gazebo::common::UpdateInfo& info) { OnUpdate(info); }));
+        [this](const gazebo::common::UpdateInfo& info) { OnUpdate(info); });
 
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
                                                     << ros_node_->getNamespace() << "' drive_model='"
@@ -234,13 +232,12 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
                                                     << "' ground truth pose='" << kSimulationGroundTruthPoseTopic
                                                     << "' twist='" << kSimulationGroundTruthTwistTopic
                                                     << "' uses Gazebo-owned integration");
-    callbacks_->invalidate();
-    hold_gate_->Ready();
+    hold_->Ready();
   }
 
   void Reset() override {
-    if (!hold_gate_) return;
-    hold_gate_->with_command([this](bool) {
+    if (!hold_) return;
+    hold_->Control([this](bool) {
       HoldZero();
       next_state_publish_time_ = 0.0;
       next_visual_publish_time_ = 0.0;
@@ -260,13 +257,10 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
 
     update_connection_.reset();
     command_subscriber_.shutdown();
-    if (callbacks_) callbacks_->drain();
 
-    // All ROS/Gazebo command producers are drained before releasing the binding.
-    // Unregister also waits for any in-flight world zero callback.
-    if (hold_gate_) {
-      hold_gate_.reset();
-    }
+    // All ROS/Gazebo command producers are drained before releasing the seat.
+    // Closing it also waits for any in-flight HOLD tick.
+    hold_.reset();
 
     native_joints_publisher_.shutdown();
     joint_states_publisher_.shutdown();
@@ -283,12 +277,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     model_.reset();
   }
 
-  static void HoldZeroThunk(void* self) {
-    static_cast<MecanumContractPlugin*>(self)->HoldZero();
-  }
-
+  // The HOLD output: zero command, zero wheel efforts and, in ideal mode, zero rigid-body velocity.
   void HoldZero() {
-    if (callbacks_) callbacks_->invalidate();
     std::lock_guard<std::mutex> lock(command_mutex_);
     front_velocity_command_ = 0.0;
     left_velocity_command_ = 0.0;
@@ -304,12 +294,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (shutting_down_.load(std::memory_order_acquire)) {
       return;
     }
-    hold_gate_->with_command([&](bool held) {
-      if (held) {
-        HoldZero();
-        return;
-      }
-      if (!callbacks_->current()) return;
+    hold_->Command([&] {
       std::lock_guard<std::mutex> lock(command_mutex_);
       front_velocity_command_ = linear_scale_ * ClampFinite(command->linear.x, max_front_velocity_);
       left_velocity_command_ = linear_scale_ * ClampFinite(command->linear.y, max_left_velocity_);
@@ -321,7 +306,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (shutting_down_.load(std::memory_order_acquire) || !ros_node_ || !ros::ok()) {
       return;
     }
-    hold_gate_->with_command([&](bool held) {
+    hold_->Control([&](bool held) {
     const double now = info.simTime.Double();
     double dt = 0.0;
     if (last_update_time_ > 0.0 && now >= last_update_time_) {
@@ -624,7 +609,6 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   std::atomic<bool> shutting_down_{false};
   gazebo::event::ConnectionPtr update_connection_;
   std::unique_ptr<ros::NodeHandle> ros_node_;
-  std::unique_ptr<xgc2_gazebo_scene::ChassisRosCallbacks> callbacks_;
   ros::Subscriber command_subscriber_;
   ros::Publisher pose_publisher_;
   ros::Publisher twist_publisher_;
@@ -634,7 +618,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   ros::Publisher power_voltage_publisher_;
   tf2_ros::TransformBroadcaster tf_broadcaster_;
   std::mutex command_mutex_;
-  std::unique_ptr<xgc2_gazebo_scene::ChassisBinding> hold_gate_;
+  std::unique_ptr<xgc2_gazebo_scene::ChassisHold> hold_;
   double front_velocity_command_{0.0};
   double left_velocity_command_{0.0};
   double yaw_velocity_command_{0.0};

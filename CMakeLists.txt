@@ -12,7 +12,6 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 find_package(gazebo REQUIRED)
-find_package(XgcXrpc REQUIRED CONFIG)
 
 catkin_package(
   LIBRARIES gazebo_sim_mecanum_contract
@@ -37,7 +36,6 @@ target_link_libraries(gazebo_sim_mecanum_contract
   ${catkin_LIBRARIES}
   ${GAZEBO_LIBRARIES}
   Threads::Threads
-  XgcXrpc::http
 )
 
 install(TARGETS gazebo_sim_mecanum_contract
