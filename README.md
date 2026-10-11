@@ -63,9 +63,9 @@ rostopic pub -r 20 /ugv1/cmd_vel geometry_msgs/Twist \
 ```
 
 The caller supplies a prepared absolute world, explicit native simulation-v1
-ServiceRef and target. Its fixed chassis roster must grant each model_name.
-Gazebo starts and stops through the explicit native_world launch workflow;
-the running native provider manages entities and HOLD. For an existing native
+ServiceRef and target. A model joins the world's HOLD roster by itself when it
+is created; the world takes no roster. Gazebo starts and stops through the explicit
+native_world launch workflow; the running native provider manages entities and HOLD. For an existing native
 world, use `spawn.launch` with the same explicit reference and target. Multiple
 robots require unique ns and public model_name. Set `drive_model:=ideal` per
 robot when a lightweight model is preferred. Packaged process definitions pin
@@ -114,10 +114,10 @@ recontact, tilted partial support, and repeated HOLD/release plus model
 spawn/delete. They use disposable simulation models only. HOLD checks allow
 1.5 simulation seconds for physical braking; acknowledgment does not claim
 instantaneous removal of inertia. These full vehicle tests require a prepared
-isolated world roster including ugv1 and ugv2 and have not been rerun for this
-native migration. The five-model native fixture verified real admission/output,
-blocked-dispatcher backlog rejection and concurrent Delete. Its SIGINT shutdown
-failed; evidence and remaining gates are in [native validation](docs/native-validation.md).
+isolated world and have not been rerun for the HOLD migration. The headless
+fixture of `gazebo-sim-scout` (`scout/test/native/verify.py`) runs this plugin in both
+drive modes beside the Scout plugins and verifies HOLD end to end; see
+[native validation](docs/native-validation.md) and [HOLD](docs/hold_contract.md).
 
 Python control consumers require an explicitly selected interpreter >=3.10 with
 the formal XRPC wheel and xgc2_scene_runtime. CMake checks PYTHON_EXECUTABLE before

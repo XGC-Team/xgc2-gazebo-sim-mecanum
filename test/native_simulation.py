@@ -1,5 +1,6 @@
 """Bound simulation-v1 operations for isolated physical regression fixtures."""
 import json
+import time
 from types import SimpleNamespace
 from urllib.parse import quote
 import rospy
@@ -30,12 +31,30 @@ class NativeSimulation:
     def pause(self): self.native.operation('/v1/world/pause', {})
     def resume(self): self.native.operation('/v1/world/resume', {})
     def hold(self, name, held):
-        status=self.query('/v1/chassis/hold')
-        result=self.native.client.json('/v1/chassis/hold', {'expected_revision':status['revision'],
-            'changes':[{'robot_id':name, 'held':bool(held)}]}, timeout=5)
-        if result.get('stage')!='applied': raise RuntimeError('native HOLD did not apply: '+str(result))
-        if held and not result['changes'][0]['zero_applied']: raise RuntimeError('native zero sink did not complete')
+        """Engages (waits for the native zero) or releases one robot through the HOLD capability of the world."""
+        if held:
+            row = self.call('Engage', {'robot_ids':[name]})['robots'][0]
+            if row['outcome'] not in ('engaged', 'already_held'): raise RuntimeError('native HOLD refused: '+str(row))
+            deadline = time.monotonic()+5
+            while row['stage'] == 'gated':
+                if time.monotonic() > deadline: raise RuntimeError('native zero was not written: '+str(row))
+                time.sleep(.01)
+                row = self.robot(name)[0]
+            return row
+        row, instance = self.robot(name)
+        if not row['held']: return row
+        result = self.call('Release', {'expected_instance':instance,
+            'changes':[{'robot_id':name, 'expected_revision':row['revision']}]})['robots'][0]
+        if result['outcome'] != 'released': raise RuntimeError('native HOLD was not released: '+str(result))
         return result
+    def call(self, method, body):
+        return self.native.client.json('/v1/call/xgc2.chassis.hold/'+method, body, timeout=5)
+    def robot(self, name):
+        """The HOLD state of a robot and the instance of the world that reported it."""
+        state = self.call('State', {})
+        rows = [row for row in state['robots'] if row['robot_id'] == name]
+        if not rows: raise RuntimeError('native HOLD does not know robot '+name)
+        return rows[0], state['instance']
     def set_model(self, state):
         entity=self.entity(state.model_name)
         p,q,t=state.pose.position,state.pose.orientation,state.twist

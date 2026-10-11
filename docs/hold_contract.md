@@ -1,31 +1,25 @@
-# Native HOLD and lifetime
+# Chassis HOLD
 
-The ModelPlugin binds explicit chassisRobotId to its native world. The ID equals
-the public simulation-v1 entity ID and must be declared in the prepared world's
-at-most-16 chassis_robot_ids grant. ROS namespace/private model name authorize
-no control. Ready() follows complete successful native setup. Creation fails
-for absent authority, identity or readiness.
+The Mecanum simulation takes part in chassis HOLD. The contract is the one of `xgc2-chassis-hold`
+(`contracts/chassis-hold.md` of `libxgc2-chassis-hold-dev`); the Gazebo binding (the `xgc2.chassis.hold` capability of the
+world host, dynamic roster, command admission, native tick, feedback) is described in
+`xgc2_gazebo_scene/docs/chassis-hold.md` of `ros-noetic-xgc2-gazebo-scene`. This page lists only what the Mecanum
+plugin contributes.
 
-One world provider/listener owns /v1/chassis/hold. Read the applied revision, then
-supply expected_revision and {robot_id, held} changes. Successful applied HOLD
-includes native zero-sink completion. Per-robot UDP Gate/Hub and listener threads
-are removed.
+* The plugin element `chassisRobotId` is the entity ID. The plugin reserves it with `xgc2_gazebo_scene::ChassisHold`
+  when it loads and joins the HOLD roster when its native setup is complete; it leaves when it is destroyed. A model
+  that is created again under the same ID starts held if it was held. The ROS namespace and the model name
+  authorize no control.
+* `cmd_vel` is subscribed on the world's command queue, which records when a message was queued. A command that
+  is not admitted (the robot is held, or the command was queued before the last release) never reaches the
+  plugin's command state, however late it is dispatched.
+* The control step runs under the lock of the HOLD seat, so it never overlaps the zero output of the native
+  tick. While the world is paused the tick runs on its own thread.
+* Zero output, written on every tick while held: zero front, left and yaw commands and zero effort on the four
+  wheel joints; in ideal mode also zero rigid-body velocity. In high-fidelity mode the control step keeps running
+  its wheel-speed loops with the zero commands, so the wheels brake and the Mecanum forces still act.
+* Feedback for `stopped` is the horizontal speed and yaw rate of the model.
 
-ROS command admission, command state and actual native wheel/velocity output
-share ChassisBinding::with_command. It tries the fixed world domain lock once;
-contention skips that sample. Domain lock precedes the command mutex. HOLD clears
-state and all native wheel efforts; ideal mode also applies zero rigid-body
-velocity. Release keeps zero cached targets until a fresh command. Physical
-inertia/contact response is distinct from zero actuator output.
-
-Models use one fixed shared world ROS dispatcher with no model spinner thread.
-Owner-specific queue entries capture an epoch. HOLD/release/reset invalidate it
-without native allocation; stale entries consume the underlying SubscriptionQueue
-but skip their action. Admission rechecks the epoch inside the world transaction,
-so dispatch delayed until after release cannot revive pre-HOLD commands.
-
-Native deletion zeroes/retires before Gazebo link Fini. Teardown disconnects
-updates, closes subscriptions, drains admitted callbacks and unregisters bindings.
-Binding destruction never touches finalized joints. Gazebo start/stop remains
-explicit process management; the provider controls the running domain only.
-See native-validation.md for evidence and the unresolved process shutdown gate.
+Zero output is not a physical stop: inertia and contact response are separate facts. The test in
+`gazebo-sim-scout` (`scout/test/native/verify.py`, see its `native-validation.md`) runs this plugin, both drive
+models included, with the Scout plugins in one headless world.
