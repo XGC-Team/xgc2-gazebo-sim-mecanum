@@ -6,7 +6,7 @@ from urllib.parse import quote
 import rospy
 from geometry_msgs.msg import Pose, Twist
 from xgc2_xrpc.runtime import Runtime
-from xgc2_scene_runtime.simulation_client import SimulationClient
+from xgc2_gazebo_scene.simulation_client import SimulationClient
 
 class NativeSimulation:
     def __init__(self):

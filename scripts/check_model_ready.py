@@ -7,7 +7,7 @@ if sys.version_info < (3, 8):
     raise RuntimeError('Native readiness requires an explicitly selected Python >= 3.8 and the formal XRPC wheel')
 from urllib.parse import quote
 from xgc2_xrpc.runtime import Runtime
-from xgc2_scene_runtime.simulation_client import SimulationClient
+from xgc2_gazebo_scene.simulation_client import SimulationClient
 
 def main():
     parser = argparse.ArgumentParser()
