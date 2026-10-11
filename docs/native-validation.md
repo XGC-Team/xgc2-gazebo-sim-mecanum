@@ -20,6 +20,7 @@ moving; commands queued before a release are not replayed; HOLD works while the 
 model starts held; a new world host starts with nothing held.
 
 The package rostests were then run against an isolated prepared native world, its discovered ServiceRef and
-`xgc2_scene_runtime`: `ideal_drive.test` passes all three cases, and `high_fidelity_drive.test` passes all six,
+the Python simulation-v1 client, now owned by `xgc2_gazebo_scene.simulation_client`:
+`ideal_drive.test` passes all three cases, and `high_fidelity_drive.test` passes all six,
 including repeated HOLD and model deletion/recreation through `test/native_simulation.py`.
 Focal controlled-toolchain ABI, installed packages and calibration remain unverified.

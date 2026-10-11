@@ -120,5 +120,5 @@ drive modes beside the Scout plugins and verifies HOLD end to end; see
 [native validation](docs/native-validation.md) and [HOLD](docs/hold_contract.md).
 
 Python control consumers require an explicitly selected interpreter >=3.10 with
-the formal XRPC wheel and xgc2_scene_runtime. CMake checks PYTHON_EXECUTABLE before
+the formal XRPC 0.2.0 wheel and `xgc2_gazebo_scene.simulation_client`. CMake checks PYTHON_EXECUTABLE before
 catkin rewrites installed script shebangs. The system Python is not replaced.
