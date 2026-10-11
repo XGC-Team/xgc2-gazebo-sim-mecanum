@@ -1,3 +1,4 @@
+#include <xgc2_gazebo_scene/ros_master_registration.hpp>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -86,10 +87,19 @@ bool SdfDeclaresExactRelativeTopic(const sdf::ElementPtr& sdf, const char* eleme
 // wheel-speed loops and converts wheel/ground slip into bounded Mecanum forces.
 class MecanumContractPlugin final : public gazebo::ModelPlugin {
  private:
+  std::atomic<bool> initialized_{false};
+  std::unique_ptr<xgc2_gazebo_scene::RosMasterRegistration> registration_;
  public:
   ~MecanumContractPlugin() override { Shutdown(); }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override {
+    if (!ros::isInitialized()) throw std::runtime_error("native robot requires the Gazebo ROS data owner");
+    registration_ = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([this, model, sdf] {
+      Initialize(model, sdf);
+      initialized_.store(true, std::memory_order_release);
+    });
+  }
+  void Initialize(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) {
     model_ = std::move(model);
     if (!model_) {
       gzerr << "[gazebo_sim_mecanum] Missing Gazebo model\n";
@@ -173,6 +183,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       contact_manager_ = model_->GetWorld()->Physics()->GetContactManager();
       // Contact force feedback must exist even when no external contact sensor
       // subscribes. Read only the current physics step's active contacts.
+      boost::recursive_mutex::scoped_lock physics(*model_->GetWorld()->Physics()->GetPhysicsUpdateMutex());
       contact_manager_->SetNeverDropContacts(true);
     }
 
@@ -236,6 +247,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
   void Reset() override {
+    if (!initialized_.load(std::memory_order_acquire)) return;
     if (!hold_) return;
     hold_->Control([this](bool) {
       HoldZero();
@@ -251,6 +263,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
 
  private:
   void Shutdown() {
+    registration_.reset();
     if (shutting_down_.exchange(true, std::memory_order_acq_rel)) {
       return;
     }

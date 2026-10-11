@@ -5,7 +5,7 @@
       "id": "mecanum-gazebo-robot",
       "version": "1.2.0",
       "label": "Mecanum Gazebo robot",
-      "description": "One selectable high-fidelity or ideal Mecanum model attached to an existing Gazebo Classic server.",
+      "description": "One selectable high-fidelity or ideal Mecanum model launched in parallel with the allocated Gazebo Classic server.",
       "parameters": {
         "groups": [
           {
@@ -45,11 +45,11 @@
           },
           "rosMasterUri": {
             "type": "string",
-            "description": "Exact ROS master URI supplied by the completed Experiment world context"
+            "description": "Pre-allocated session ROS master URI"
           },
           "launchInput": {
             "type": "json",
-            "description": "Frozen Robot and actual completed world ServiceRef for native launch",
+            "description": "Frozen Robot and allocated world ServiceRef for parallel native launch",
             "default": {
               "robot": {},
               "simulationServiceRef": {}

@@ -55,7 +55,7 @@ and coupled-command effects instead of forcing exact command tracking.
 
 ```bash
 source /opt/ros/noetic/setup.bash
-roslaunch gazebo_sim_mecanum simple.launch gui:=false drive_model:=high_fidelity \
+roslaunch --wait gazebo_sim_mecanum simple.launch gui:=false drive_model:=high_fidelity \
   world_name:="$SIMULATION_PREPARED_WORLD" \
   simulation_service_ref_json:="$SIMULATION_SERVICE_REF_JSON" target_id:="$SIMULATION_TARGET_ID"
 rostopic pub -r 20 /ugv1/cmd_vel geometry_msgs/Twist \

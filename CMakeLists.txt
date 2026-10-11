@@ -62,6 +62,8 @@ install(FILES LICENSE MODEL_ASSET_NOTICE.md
 
 if(CATKIN_ENABLE_TESTING)
   find_package(PythonInterp 3 REQUIRED)
+  add_test(NAME mecanum_parallel_launch
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_parallel_launch.py)
   find_package(roslaunch REQUIRED)
   find_package(rostest REQUIRED)
   add_test(
