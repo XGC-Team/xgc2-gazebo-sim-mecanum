@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+test -f /usr/share/xgc2/process-definitions/mecanum-gazebo-robot.json
+test -x /opt/ros/noetic/lib/xgc2_simple_lidar/launch_robot.py
+
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 

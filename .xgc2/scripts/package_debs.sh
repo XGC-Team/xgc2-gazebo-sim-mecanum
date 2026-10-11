@@ -47,6 +47,9 @@ copy_path "${PREFIX_ROOT}/share/${ROS_PACKAGE}"
 copy_path "${PREFIX_ROOT}/lib/libgazebo_sim_mecanum_contract.so"
 copy_path "${PREFIX_ROOT}/lib/${ROS_PACKAGE}"
 
+install -D -m 0644 "${REPO_ROOT}/process-definitions/mecanum-gazebo-robot.json" \
+  "${PKG_ROOT}/usr/share/xgc2/process-definitions/mecanum-gazebo-robot.json"
+
 cat >"${PKG_ROOT}/DEBIAN/control" <<EOF
 Package: ${PACKAGE}
 Version: ${VERSION}
