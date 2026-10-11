@@ -12,7 +12,7 @@ test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_mecanum/models/xgc2_mecanum_ugv
 test -f "/opt/ros/${ROS_DISTRO}/share/mecanum_description/meshes/mecanum_wheel_left.STL"
 
 test -f "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_worlds/launch/native_world.launch"
-dpkg -s ros-noetic-xgc2-gazebo-scene libxgc2-xrpc1 >/dev/null
+dpkg -s ros-noetic-xgc2-gazebo-scene >/dev/null
 for launch in simple spawn; do
   xmllint --noout "/opt/ros/${ROS_DISTRO}/share/gazebo_sim_mecanum/launch/${launch}.launch"
 done
