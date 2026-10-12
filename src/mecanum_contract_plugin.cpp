@@ -88,48 +88,40 @@ bool SdfDeclaresExactRelativeTopic(const sdf::ElementPtr& sdf, const char* eleme
 class MecanumContractPlugin final : public gazebo::ModelPlugin {
  private:
   std::atomic<bool> initialized_{false};
+  std::atomic<bool> ros_registered_{false};
   std::unique_ptr<xgc2_gazebo_scene::RosMasterRegistration> registration_;
  public:
   ~MecanumContractPlugin() override { Shutdown(); }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override {
     if (!ros::isInitialized()) throw std::runtime_error("native robot requires the Gazebo ROS data owner");
-    registration_ = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([this, model, sdf] {
-      Initialize(model, sdf);
-      initialized_.store(true, std::memory_order_release);
+    // The native load ack must observe a complete physical chassis and HOLD
+    // seat. Only ROS IO registration belongs to the late-master callback.
+    if (!Initialize(std::move(model), sdf)) return;
+    registration_ = std::make_unique<xgc2_gazebo_scene::RosMasterRegistration>([this, sdf] {
+      RegisterRos(sdf);
     });
   }
-  void Initialize(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) {
+  bool Initialize(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) {
     model_ = std::move(model);
     if (!model_) {
       gzerr << "[gazebo_sim_mecanum] Missing Gazebo model\n";
-      return;
-    }
-    if (!ros::isInitialized()) {
-      gzerr << "[gazebo_sim_mecanum] gazebo_ros_api_plugin is required\n";
-      return;
+      return false;
     }
 
-    std::string robot_namespace = SdfValue<std::string>(sdf, "robotNamespace", "");
-    if (robot_namespace.empty()) {
-      robot_namespace = model_->GetName();
+    robot_namespace_ = SdfValue<std::string>(sdf, "robotNamespace", "");
+    if (robot_namespace_.empty()) {
+      robot_namespace_ = model_->GetName();
     }
-    ros_node_.reset(new ros::NodeHandle(robot_namespace));
 
-    const std::string command_topic = SdfValue<std::string>(sdf, "commandTopic", "cmd_vel");
     if (!SdfDeclaresExactRelativeTopic(sdf, "poseTopic", kSimulationGroundTruthPoseTopic) ||
         !SdfDeclaresExactRelativeTopic(sdf, "twistTopic", kSimulationGroundTruthTwistTopic)) {
       gzerr << "[gazebo_sim_mecanum] poseTopic/twistTopic are not configurable; they must equal "
                "the exact relative strings simulation/ground_truth/pose and "
                "simulation/ground_truth/twist. Canonical "
                "/<namespace>/pose and /twist are owned by experiment-localization-projection\n";
-      return;
+      return false;
     }
-    const std::string imu_topic = SdfValue<std::string>(sdf, "imuTopic", "imu");
-    const std::string joint_states_topic =
-        SdfValue<std::string>(sdf, "jointStatesTopic", "joint_states");
-    const std::string power_voltage_topic =
-        SdfValue<std::string>(sdf, "powerVoltageTopic", "PowerVoltage");
 
     state_publish_rate_ = SdfValue<double>(sdf, "statePublishRate", 100.0);
     visual_publish_rate_ = SdfValue<double>(sdf, "visualPublishRate", 20.0);
@@ -161,7 +153,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (drive_model_ != "high_fidelity" && drive_model_ != "ideal") {
       gzerr << "[gazebo_sim_mecanum] driveModel must be 'high_fidelity' or 'ideal', got '"
             << drive_model_ << "'\n";
-      return;
+      return false;
     }
     high_fidelity_ = drive_model_ == "high_fidelity";
     if (high_fidelity_) {
@@ -173,12 +165,15 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
         wheel_joints_[index] = model_->GetJoint(joint_names[index]);
         if (!wheel_joints_[index]) {
           gzerr << "[gazebo_sim_mecanum] Missing high-fidelity joint '" << joint_names[index] << "'\n";
-          return;
+          return false;
         }
+        const auto wheel = wheel_joints_[index]->GetChild();
+        const auto axis = wheel_joints_[index]->GlobalAxis(0);
+        wheel_inertias_[index] = axis.Dot(wheel->WorldInertiaMatrix() * axis);
       }
       if (!body_link_ || wheel_radius_ < 1.0e-6) {
         gzerr << "[gazebo_sim_mecanum] Invalid high-fidelity body or wheel radius\n";
-        return;
+        return false;
       }
       contact_manager_ = model_->GetWorld()->Physics()->GetContactManager();
       // Contact force feedback must exist even when no external contact sensor
@@ -186,6 +181,34 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       boost::recursive_mutex::scoped_lock physics(*model_->GetWorld()->Physics()->GetPhysicsUpdateMutex());
       contact_manager_->SetNeverDropContacts(true);
     }
+
+    hold_.reset(new xgc2_gazebo_scene::ChassisHold(
+        model_->GetWorld(), sdf->Get<std::string>("chassisRobotId"),
+        {[this] { HoldZero(); }, xgc2_gazebo_scene::BodySpeed(model_.get())}));
+
+    tf_child_frame_ = TrimSlashes(robot_namespace_);
+    if (tf_child_frame_.empty()) {
+      tf_child_frame_ = model_->GetName();
+    }
+    tf_child_frame_ += "/" + base_frame_;
+
+    update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
+        [this](const gazebo::common::UpdateInfo& info) { OnUpdate(info); });
+    hold_->Ready();
+    initialized_.store(true, std::memory_order_release);
+    gzmsg << "[gazebo_sim_mecanum] model='" << model_->GetName()
+          << "' native chassis Ready; ROS IO registration deferred\n";
+    return true;
+  }
+
+  void RegisterRos(const sdf::ElementPtr& sdf) {
+    ros_node_.reset(new ros::NodeHandle(robot_namespace_));
+    const std::string command_topic = SdfValue<std::string>(sdf, "commandTopic", "cmd_vel");
+    const std::string imu_topic = SdfValue<std::string>(sdf, "imuTopic", "imu");
+    const std::string joint_states_topic =
+        SdfValue<std::string>(sdf, "jointStatesTopic", "joint_states");
+    const std::string power_voltage_topic =
+        SdfValue<std::string>(sdf, "powerVoltageTopic", "PowerVoltage");
 
     ros_node_->param("state_publish_rate", state_publish_rate_, state_publish_rate_);
     ros_node_->param("visualize_max_freq", visual_publish_rate_, visual_publish_rate_);
@@ -221,29 +244,18 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     joint_states_publisher_ = ros_node_->advertise<sensor_msgs::JointState>(joint_states_topic, 1, false);
     power_voltage_publisher_ =
         ros_node_->advertise<std_msgs::Float32>(power_voltage_topic, 10, false);
-    hold_.reset(new xgc2_gazebo_scene::ChassisHold(
-        model_->GetWorld(), sdf->Get<std::string>("chassisRobotId"),
-        {[this] { HoldZero(); }, xgc2_gazebo_scene::BodySpeed(model_.get())}));
+    tf_broadcaster_.reset(new tf2_ros::TransformBroadcaster);
     ros_node_->setCallbackQueue(hold_->CommandQueue());
     command_subscriber_ =
         ros_node_->subscribe<geometry_msgs::Twist>(command_topic, 16, &MecanumContractPlugin::CommandCallback, this);
 
-    tf_child_frame_ = TrimSlashes(robot_namespace);
-    if (tf_child_frame_.empty()) {
-      tf_child_frame_ = model_->GetName();
-    }
-    tf_child_frame_ += "/" + base_frame_;
-
-    update_connection_ = gazebo::event::Events::ConnectWorldUpdateBegin(
-        [this](const gazebo::common::UpdateInfo& info) { OnUpdate(info); });
-
+    ros_registered_.store(true, std::memory_order_release);
     ROS_INFO_STREAM("[gazebo_sim_mecanum] model='" << model_->GetName() << "' namespace='"
                                                     << ros_node_->getNamespace() << "' drive_model='"
                                                     << (high_fidelity_ ? "high_fidelity" : "ideal")
                                                     << "' ground truth pose='" << kSimulationGroundTruthPoseTopic
                                                     << "' twist='" << kSimulationGroundTruthTwistTopic
                                                     << "' uses Gazebo-owned integration");
-    hold_->Ready();
   }
 
   void Reset() override {
@@ -281,6 +293,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     imu_publisher_.shutdown();
     twist_publisher_.shutdown();
     pose_publisher_.shutdown();
+    tf_broadcaster_.reset();
     ros_node_.reset();
 
     for (auto& joint : wheel_joints_) {
@@ -316,7 +329,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   }
 
   void OnUpdate(const gazebo::common::UpdateInfo& info) {
-    if (shutting_down_.load(std::memory_order_acquire) || !ros_node_ || !ros::ok()) {
+    if (shutting_down_.load(std::memory_order_acquire) ||
+        !initialized_.load(std::memory_order_acquire)) {
       return;
     }
     hold_->Control([&](bool held) {
@@ -336,6 +350,9 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       } else {
         ApplyPlanarVelocity();
       }
+    // ROS availability controls telemetry only. Physics and HOLD continue
+    // before the first master and while ROS IO is unavailable.
+    if (!ros_registered_.load(std::memory_order_acquire) || !ros::ok()) return;
     if (next_state_publish_time_ == 0.0 || now + 1.0e-9 >= next_state_publish_time_) {
       PublishState(now);
       AdvanceDeadline(now, 1.0 / state_publish_rate_, &next_state_publish_time_);
@@ -426,6 +443,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     const ignition::math::Pose3d pose = model_->WorldPose();
     const ignition::math::Vector3d body_velocity = pose.Rot().RotateVectorReverse(model_->WorldLinearVel());
     const double body_yaw_rate = model_->WorldAngularVel().Z();
+    const double step = dt > 0.0 ? dt : model_->GetWorld()->Physics()->GetMaxStepSize();
     const auto contact_loads = WheelContactLoads();
     std_msgs::Float64MultiArray traction_report;
     traction_report.data.resize(8, 0.0);
@@ -446,9 +464,17 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       const double traction = ClampFinite(traction_gain_ * slip_speed, friction_coefficient_ * normal_load);
       traction_report.data[index] = normal_load;
       traction_report.data[index + kWheelCount] = traction;
-      const double motor_torque =
-          ClampFinite(wheel_pid_p_ * (target_joint_speed - joint_speed), wheel_torque_limit_);
       const double reaction_torque = joint_sign[index] * wheel_radius_ * traction;
+      // Evaluate the P motor at the end-of-step wheel speed, including the
+      // already computed ground reaction. An explicit P update oscillates at
+      // 4 ms for the authored 0.00048 kg m^2 wheel inertia. This implicit motor
+      // solve preserves the steady-state P/reaction balance and torque limit;
+      // Gazebo still integrates the joint and body from forces only.
+      const double motor_step = wheel_pid_p_ * step / wheel_inertias_[index];
+      const double motor_torque = ClampFinite(
+          (wheel_pid_p_ * (target_joint_speed - joint_speed) + motor_step * reaction_torque) /
+              (1.0 + motor_step),
+          wheel_torque_limit_);
       wheel_joints_[index]->SetForce(0, motor_torque - reaction_torque);
 
       // The planar roller Jacobian is projected onto each actual contact
@@ -471,7 +497,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
       }
     }
 
-    if (traction_publisher_.getNumSubscribers() > 0) traction_publisher_.publish(traction_report);
+    if (ros_registered_.load(std::memory_order_acquire) && ros::ok() &&
+        traction_publisher_.getNumSubscribers() > 0) traction_publisher_.publish(traction_report);
 
     if (dt > 0.0 && std::isfinite(body_force_x) && std::isfinite(body_force_y) &&
         std::isfinite(body_torque_z)) {
@@ -613,7 +640,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     transform.transform.rotation.y = pose.Rot().Y();
     transform.transform.rotation.z = pose.Rot().Z();
     transform.transform.rotation.w = pose.Rot().W();
-    tf_broadcaster_.sendTransform(transform);
+    tf_broadcaster_->sendTransform(transform);
   }
 
   gazebo::physics::ModelPtr model_;
@@ -629,7 +656,7 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   ros::Publisher joint_states_publisher_;
   ros::Publisher native_joints_publisher_;
   ros::Publisher power_voltage_publisher_;
-  tf2_ros::TransformBroadcaster tf_broadcaster_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::mutex command_mutex_;
   std::unique_ptr<xgc2_gazebo_scene::ChassisHold> hold_;
   double front_velocity_command_{0.0};
@@ -650,9 +677,11 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
   bool use_imu_orientation_{false};
   bool high_fidelity_{true};
   std::string drive_model_{"high_fidelity"};
+  std::string robot_namespace_;
   double wheel_radius_{0.05};
   double wheelbase_sum_{0.30};
   double wheel_pid_p_{0.35};
+  std::array<double, kWheelCount> wheel_inertias_{};
   double wheel_torque_limit_{1.2};
   double traction_gain_{18.0};
   double friction_coefficient_{0.85};
