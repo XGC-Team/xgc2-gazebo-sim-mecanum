@@ -140,11 +140,8 @@ if grep -Eq '"poseTopic", "pose"|"twistTopic", "twist"|"diagnostic/pose"|"diagno
   echo "Plugin defaults must not advertise canonical or short diagnostic pose/twist" >&2
   exit 1
 fi
-grep -q '`/ugv1/simulation/ground_truth/pose`' README.md
-if grep -Eq '`/ugv1/pose`|`/ugv1/twist`|`/ugv1/diagnostic/pose`' README.md; then
-  echo "README must not document canonical /ugv1/pose or /twist as plugin contract" >&2
-  exit 1
-fi
+# Public README is a signpost; executable source/model checks above own the topic contract.
+grep -q 'xgc2-dev-memory' README.md
 grep -q 'model_->SetLinearVel' src/mecanum_contract_plugin.cpp
 grep -q 'model_->SetAngularVel' src/mecanum_contract_plugin.cpp
 grep -q 'wheel_joints_\[index\]->SetForce' src/mecanum_contract_plugin.cpp

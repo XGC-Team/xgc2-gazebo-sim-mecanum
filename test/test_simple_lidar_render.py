@@ -104,9 +104,9 @@ class SimpleLidarRenderTest(unittest.TestCase):
                                    'simple_lidar_vfov_deg:=40', 'simple_lidar_hres:=90',
                                    'simple_lidar_vres:=8'])
         sensor = root.find(".//sensor[@name='simple_lidar']")
-        self.assertEqual(sensor.get('type'), 'ray')
-        self.assertEqual(sensor.find('plugin').get('filename'), 'libxgc2_simple_lidar_cpu.so')
-        self.assertEqual(sensor.findtext('plugin/robotNamespace'), 'ugv2')
+        self.assertEqual(sensor.get('type'), 'xgc2_cpu_lidar')
+        self.assertEqual(sensor.findall('plugin'), [])
+        self.assertEqual(sensor.findtext('topic'), 'ugv2/simple_lidar/points')
         self.assertEqual(float(sensor.findtext('update_rate')), 12)
         self.assertEqual(float(sensor.findtext('ray/range/max')), 8)
         for direction, count, degrees in [('horizontal', 90, 120), ('vertical', 8, 40)]:
@@ -168,14 +168,14 @@ class SimpleLidarRenderTest(unittest.TestCase):
                     self.assertEqual(1, len(enabled.findall(".//sensor")))
                     sensor = sensors[0]
                     self.assertEqual("simple_lidar", sensor.get("name"))
-                    self.assertEqual("gpu_ray", sensor.get("type"))
+                    self.assertEqual("xgc2_gpu_lidar", sensor.get("type"))
                     self.assertEqual(installed_pose, sensor_pose(sensor))
 
                     plugins = sensor.findall("plugin")
-                    self.assertEqual(1, len(plugins))
-                    self.assertEqual(namespace,
-                                     plugins[0].findtext("robotNamespace", "").strip())
-                    topics[namespace] = "/{}/simple_lidar/points".format(namespace)
+                    self.assertEqual([], plugins)
+                    topic = sensor.findtext("topic")
+                    self.assertEqual(topic, "{}/simple_lidar/points".format(namespace))
+                    topics[namespace] = "/" + topic
 
                     # The optional mount is the sole SDF change in either mode.
                     link.remove(sensor)
