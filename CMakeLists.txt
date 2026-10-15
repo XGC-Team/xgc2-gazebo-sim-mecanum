@@ -45,6 +45,7 @@ install(TARGETS gazebo_sim_mecanum_contract
 )
 
 catkin_install_python(PROGRAMS
+  scripts/prepare_mecanum_robot
   scripts/check_model_ready.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

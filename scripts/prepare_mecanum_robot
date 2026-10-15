@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""Render this product's Gazebo model from {robot, runMode} on stdin."""
+import json
+from pathlib import Path
+import sys
+import rospkg
+from xgc2_gazebo_scene.robot_placement import ground_model, read_placement
+
+
+def main():
+    row, mode = read_placement()
+    model = Path(rospkg.RosPack().get_path('gazebo_sim_mecanum')) / 'models/xgc2_mecanum_ugv/model.sdf.xacro'
+    print(json.dumps(ground_model(row, mode, 'mecanum_ugv', model, 'sdf'), allow_nan=False))
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as error:
+        sys.exit('prepare_mecanum_robot: ' + ' '.join(str(error).splitlines()))
