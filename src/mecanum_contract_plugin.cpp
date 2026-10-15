@@ -594,8 +594,8 @@ class MecanumContractPlugin final : public gazebo::ModelPlugin {
     if (last_visual_update_time_ > 0.0 && sim_time >= last_visual_update_time_) {
       dt = sim_time - last_visual_update_time_;
     }
-    constexpr double wheel_radius = 0.05;
-    constexpr double half_wheelbase_plus_half_track = 0.30;
+    const double wheel_radius = wheel_radius_;
+    const double half_wheelbase_plus_half_track = wheelbase_sum_;
     const double wheel_velocity[4] = {
         (front_velocity - left_velocity - yaw_velocity * half_wheelbase_plus_half_track) / wheel_radius,
         -(front_velocity + left_velocity + yaw_velocity * half_wheelbase_plus_half_track) / wheel_radius,
