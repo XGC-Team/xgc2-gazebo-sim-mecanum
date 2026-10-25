@@ -88,7 +88,7 @@ jobs:
             -e DEBIAN_FRONTEND=noninteractive \
             -e PYTHONPYCACHEPREFIX=/tmp/xgc2-gazebo-sim-mecanum-pycache \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
-            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 bash -lc '
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.11@sha256:6b1d4d63de788034a79c7e5531f93a48e25aaf0e62a8f839d7adcc37d438c99c bash -lc '
               set -euo pipefail
               source /opt/ros/noetic/setup.bash
               cd /workspace/repo

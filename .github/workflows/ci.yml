@@ -15,7 +15,7 @@ defaults:
 jobs:
   compliance:
     runs-on: ubuntu-latest
-    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
+    container: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.11@sha256:6b1d4d63de788034a79c7e5531f93a48e25aaf0e62a8f839d7adcc37d438c99c
     steps:
       - uses: actions/checkout@v4
         with:
