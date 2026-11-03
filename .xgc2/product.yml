@@ -80,9 +80,11 @@ release:
   requires:
   - xgc2-mecanum-description
   - xgc2-gazebo-sim-scenes
+  - xgc2-xrpc
   dependency_policy:
     xgc2-mecanum-description: rebuild
     xgc2-gazebo-sim-vrpn-bridge: verify
     xgc2-gazebo-sim-scenes: verify
+    xgc2-xrpc: verify
   apt_versions:
     focal: 0.2.0-5
