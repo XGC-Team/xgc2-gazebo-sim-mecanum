@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/lib/xgc2/xrpc/python/bin/python3
 """Query one explicitly bound native entity; creation completes through its receipt."""
 import argparse
 import json

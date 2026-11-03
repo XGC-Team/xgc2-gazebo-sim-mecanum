@@ -23,6 +23,7 @@
   <exec_depend>gazebo_msgs</exec_depend>
   <exec_depend>roslaunch</exec_depend>
   <exec_depend>rospy</exec_depend>
+  <exec_depend version_gte="0.2.1">python3-xgc2-xrpc</exec_depend>
   <exec_depend>rostest</exec_depend>
   <exec_depend>mecanum_description</exec_depend>
   <exec_depend>xgc2_simple_lidar</exec_depend>
